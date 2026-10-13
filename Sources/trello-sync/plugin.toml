@@ -1,0 +1,24 @@
+id = "trello-sync"
+name = "Trello Sync"
+version = "1.0.0"
+description = "Syncs a Theron task list with a Trello board – read the board into the list or write the list to the board. A “Sync with Trello” button on the task-list page."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.16.0"
+entry = "trello_sync"
+permissions = ["network", "tasklists", "ui"]
+
+[[settings]]
+key = "api_key"
+type = "secret"
+label = "Trello API key"
+description = "Your Power-Up's API key: https://trello.com/power-ups/admin → your Power-Up → API key."
+required = true
+
+[[settings]]
+key = "token"
+type = "secret"
+label = "Trello token"
+description = "A token for your account: on the API key page, click “Token” and allow access (read and write)."
+required = true

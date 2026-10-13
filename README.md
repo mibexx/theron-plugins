@@ -29,3 +29,18 @@ The smallest useful plugin – to try out how plugins work.
   via ✔ (whatever came in goes along).
 
 Source: [`Sources/hello-world`](Sources/hello-world) · Package: [`Plugins/hello-world.theronplugin`](Plugins/hello-world.theronplugin)
+
+### ▦ Trello Sync · `trello-sync`
+
+Syncs a Theron task list with a Trello board – needs Theron 0.16.0.
+
+- **Settings:** your Trello API key and token.
+- **Task-list page:** select a list, click **Sync with Trello**, enter the board id or link. The plugin reads the board,
+  shows what it found and asks for the direction: **read** (Trello → Theron: lists → epics, cards → requirements) or
+  **write** (Theron → Trello). After that the button is **⟳ Sync**; **Unlink Trello** removes the link.
+- Status ↔ labels (“Theron: done” …), acceptance criteria in the card description; the first sync matches by name,
+  only what the sync linked is ever removed or archived.
+
+Source: [`Sources/trello-sync`](Sources/trello-sync) · Package: [`Plugins/trello-sync.theronplugin`](Plugins/trello-sync.theronplugin)
+
+**Tests:** `PYTHONPATH=<theron source> python -m pytest Sources/trello-sync/tests` (with Theron's Python environment).
