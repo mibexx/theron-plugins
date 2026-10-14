@@ -18,7 +18,7 @@ deleted).
 |---|---|
 | list | epic |
 | card name | requirement title |
-| card description | description, then `**Acceptance criteria**` and the acceptance criteria |
+| card description | description, then a bold **Acceptance criteria** heading and the acceptance criteria |
 | label “Theron: done”, “Theron: in progress” … (also “Done”, “Doing”, “Blocked” … when reading; a completed due date = done) | status |
 
 The first sync matches by name, so nothing is duplicated. Only what the sync linked is ever removed: requirements whose
