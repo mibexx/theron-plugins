@@ -1,0 +1,17 @@
+id = "elevenlabs"
+name = "ElevenLabs"
+version = "1.0.0"
+description = "Voices and speech from ElevenLabs as process nodes: pick a voice (manually in the chat, automatically by mood, or fixed) and turn a script into audio files – with v3 emotion tags. Samples play right in the chat."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.17.0"
+entry = "elevenlabs_voice"
+permissions = ["network", "ai", "files", "ui"]
+
+[[settings]]
+key = "api_key"
+type = "secret"
+label = "ElevenLabs API key"
+description = "elevenlabs.io → Developers → API Keys → Create API key. It needs at least: Text to Speech, Voices (read) and User (read, for the credits)."
+required = true

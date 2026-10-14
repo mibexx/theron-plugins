@@ -43,4 +43,19 @@ Syncs a Theron task list with a Trello board – needs Theron 0.16.0.
 
 Source: [`Sources/trello-sync`](Sources/trello-sync) · Package: [`Plugins/trello-sync.theronplugin`](Plugins/trello-sync.theronplugin)
 
-**Tests:** `PYTHONPATH=<theron source> python -m pytest Sources/trello-sync/tests` (with Theron's Python environment).
+### 🔊 ElevenLabs · `elevenlabs`
+
+Voices and speech from ElevenLabs as process nodes – needs Theron 0.17.0.
+
+- **Settings:** your ElevenLabs API key – **Test** checks it and shows the credits left.
+- **Node “Choose voice”** – manual (the voices with ▶ samples in the chat, you answer with a number, a name or in your
+  own words), automatic (by the mood of the text and a preselection like “female, German”) or fixed. Plays a sample
+  of the chosen voice in the chat.
+- **Node “Generate speech”** – the AI takes the spoken text from the input (e.g. a video script), splits it into parts
+  and ElevenLabs speaks them into audio files in the project's folder; **Emotions** adds Eleven v3 tags. Outputs the
+  file paths – or **Error** (no key, not enough credits …).
+- Every audio file path in the chat gets a ▶.
+
+Source: [`Sources/elevenlabs`](Sources/elevenlabs) · Package: [`Plugins/elevenlabs.theronplugin`](Plugins/elevenlabs.theronplugin)
+
+**Tests:** `PYTHONPATH=<theron source> QT_QPA_PLATFORM=offscreen python -m pytest Sources/*/tests` (with Theron's Python environment).
