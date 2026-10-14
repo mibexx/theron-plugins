@@ -1,6 +1,6 @@
 id = "elevenlabs"
 name = "ElevenLabs"
-version = "1.0.0"
+version = "1.0.1"
 description = "Voices and speech from ElevenLabs as process nodes: pick a voice (manually in the chat, automatically by mood, or fixed) and turn a script into audio files – with v3 emotion tags. Samples play right in the chat."
 author = "Mike Bertram · mibexx"
 license = "MIT"

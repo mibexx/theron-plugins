@@ -47,7 +47,7 @@ def register(ctx):
     voices = Voices(ctx)
     player = Player(ctx.data_dir / "samples", on_change=ctx.chat.refresh)
     ChatView(ctx, player).register()
-    Nodes(ctx, voices).register()
+    Nodes(ctx, voices, player).register()
     ctx.player, ctx.voices = player, voices   # for the tests
 
     async def test(values: dict):

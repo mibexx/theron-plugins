@@ -67,5 +67,11 @@
   "Generate speech": "Ton erzeugen",
   "Turns the incoming text (e.g. a video script) into speech with ElevenLabs – the AI picks what is spoken and splits it into parts; hands on the paths of the audio files.": "Macht aus dem eingehenden Text (z. B. einem Video-Skript) Sprache mit ElevenLabs – die KI wählt, was gesprochen wird, und teilt es in Abschnitte; übergibt die Pfade der Audio-Dateien.",
   "ElevenLabs API key": "ElevenLabs-API-Key",
-  "elevenlabs.io → Developers → API Keys → Create API key. It needs at least: Text to Speech, Voices (read) and User (read, for the credits).": "elevenlabs.io → Developers → API Keys → Create API key. Er braucht mindestens: Text to Speech, Voices (lesen) und User (lesen, für die Credits)."
+  "elevenlabs.io → Developers → API Keys → Create API key. It needs at least: Text to Speech, Voices (read) and User (read, for the credits).": "elevenlabs.io → Developers → API Keys → Create API key. Er braucht mindestens: Text to Speech, Voices (lesen) und User (lesen, für die Credits).",
+  "■ Stop": "■ Stopp",
+  "▶ Sample": "▶ Hörprobe",
+  "Choose a voice first.": "Wähle zuerst eine Stimme.",
+  "ElevenLabs has no sample of this voice.": "ElevenLabs hat keine Hörprobe dieser Stimme.",
+  "Can't play the sample: {error}": "Hörprobe lässt sich nicht abspielen: {error}",
+  "Plays the voice's sample from ElevenLabs.": "Spielt die Hörprobe der Stimme von ElevenLabs."
 }

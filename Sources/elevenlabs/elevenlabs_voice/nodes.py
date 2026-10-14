@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -14,6 +15,21 @@ EMOTION_TAGS = ("[excited]", "[happy]", "[curious]", "[sarcastic]", "[serious]",
                 "[whispers]", "[shouts]", "[laughs]", "[chuckles]", "[sighs]", "[gasps]", "[pause]", "[hesitates]")
 FORMATS = ["mp3_44100_128", "mp3_44100_192", "mp3_22050_32", "pcm_44100", "opus_48000_128"]
 EXT = {"mp3": ".mp3", "pcm": ".wav", "opus": ".opus"}
+
+
+# what Choose voice hands on before the material it passes through: "Voice: …" + the ELEVENLABS_VOICE line (+ ---)
+VOICE_LINES = re.compile(r"^(?:Voice|Stimme): .*\n(?=ELEVENLABS_VOICE:)|^.*ELEVENLABS_VOICE:.*$\n?(?:\n?---\n)?", re.M)
+
+
+def material_of(node) -> str:
+    """What the node works on: the orchestrator's assignment for this step AND the hand-overs before it – the
+    hand-over alone may be just "Voice: …" from Choose voice, the assignment alone misses the script."""
+    task, given = (node.task or "").strip(), (node.input or "").strip()
+    if not given or task in given:
+        return task or given
+    if not task or given in task:
+        return given
+    return f"ASSIGNMENT FOR THIS STEP:\n{task}\n\nHAND-OVERS FROM THE STEPS BEFORE:\n{given}"
 
 
 def json_in(text: str):
@@ -62,8 +78,8 @@ def split_text(text: str, limit: int) -> list[str]:
 
 
 class Nodes:
-    def __init__(self, ctx, voices):
-        self.ctx, self.voices = ctx, voices
+    def __init__(self, ctx, voices, player=None):
+        self.ctx, self.voices, self.player = ctx, voices, player
 
     def register(self) -> None:
         tr = self.ctx.tr
@@ -72,14 +88,15 @@ class Nodes:
             description="Picks an ElevenLabs voice – you choose it in the chat, the node picks it by the mood of the "
                         "text, or it is fixed here. Plays a sample in the chat.",
             ai_hint="Pick the ElevenLabs voice for spoken audio (before 'Generate speech'). Hands the voice on.",
-            outputs=[{"id": "voice", "label": tr("Voice")}, {"id": "error", "label": tr("Error")}],
+            outputs=[{"id": "voice", "label": tr("Voice"), "color": "success"},
+                     {"id": "error", "label": tr("Error"), "color": "error"}],
             fields=[
                 {"key": "mode", "type": "choice", "label": "Mode", "default": "manual",
                  "options": [{"value": "manual", "label": "Manual – I choose in the chat"},
                              {"value": "auto", "label": "Automatic – by mood and preselection"},
                              {"value": "fixed", "label": "Fixed – the voice below"}]},
                 {"key": "voice_id", "type": "choice", "label": "Voice", "show_if": {"mode": "fixed"},
-                 "options": self.voice_options,
+                 "options": self.voice_options, "buttons": [self.sample_button()],
                  "description": "Your ElevenLabs voices (reloaded when the API key changes)."},
                 {"key": "preselection", "type": "text", "label": "Preselection", "show_if": {"mode": ["manual", "auto"]},
                  "description": "What fits, e.g. “female, German, warm” – narrows the list (manual) and guides the "
@@ -91,7 +108,8 @@ class Nodes:
                         "is spoken and splits it into parts; hands on the paths of the audio files.",
             ai_hint="Generate spoken audio files with ElevenLabs from the incoming text (e.g. narration of a video "
                     "script). Outputs: files (paths) or error (no API key, no credits, …).",
-            outputs=[{"id": "files", "label": tr("Audio files")}, {"id": "error", "label": tr("Error")}],
+            outputs=[{"id": "files", "label": tr("Audio files"), "color": "success"},
+                     {"id": "error", "label": tr("Error"), "color": "error"}],
             fields=[
                 {"key": "emotions", "type": "bool", "label": "Emotions (v3 audio tags)", "default": True,
                  "description": "Speaks with feeling: the AI adds tags like [excited] or [whispers] (Eleven v3). "
@@ -103,6 +121,7 @@ class Nodes:
                              {"value": "eleven_flash_v2_5", "label": "Flash v2.5 – fastest, half the credits"}]},
                 {"key": "voice_id", "type": "choice", "label": "Voice",
                  "options": lambda cfg: [{"value": "", "label": "From “Choose voice” before"}] + self.voice_options(cfg),
+                 "buttons": [self.sample_button()],
                  "description": "Empty: the voice the node “Choose voice” handed over."},
                 {"key": "folder", "type": "text", "label": "Folder", "default": "audio",
                  "description": "Where the files go – relative to the project's workspace."},
@@ -111,6 +130,30 @@ class Nodes:
                 {"key": "language", "type": "text", "label": "Language (optional)",
                  "description": "ISO code like de or en – only needed when ElevenLabs guesses wrong."},
             ])
+
+    # ------------------------------------------------------------------ ▶ sample next to the voice field
+    def sample_of(self, cfg: dict) -> str:
+        voice = next((v for v in self.voices.cached() if v["voice_id"] == (cfg.get("voice_id") or "")), None)
+        return (voice or {}).get("preview_url") or ""
+
+    def sample_button(self) -> dict:
+        def label(cfg):
+            url = self.sample_of(cfg)
+            return "■ Stop" if url and self.player and self.player.playing() == url else "▶ Sample"
+
+        async def press(cfg):
+            if not cfg.get("voice_id"):
+                return False, self.ctx.tr("Choose a voice first.")
+            url = self.sample_of(cfg)
+            if not url:
+                return False, self.ctx.tr("ElevenLabs has no sample of this voice.")
+            try:
+                await asyncio.to_thread(self.player.toggle, url)
+            except Exception as exc:  # noqa: BLE001 – no player on this system, download failed …
+                return False, self.ctx.tr("Can't play the sample: {error}", error=exc)
+            return None
+
+        return {"id": "sample", "label": label, "run": press, "tooltip": "Plays the voice's sample from ElevenLabs."}
 
     def voice_options(self, cfg: dict) -> list[dict]:
         return [{"value": v["voice_id"], "label": f"{v['name']} – {label_text(v)}".rstrip(" –")}
@@ -149,17 +192,20 @@ class Nodes:
         node.say(kind="voice", data={"voice": voice, "reason": reason},
                  text=tr("Voice: **{name}** ({labels})", name=voice["name"], labels=label_text(voice)))
         node.progress(f"🎙 {voice['name']}")
+        # the material goes on with the voice: the next node (e.g. Generate speech) still gets the script
+        passed = VOICE_LINES.sub("", material_of(node)).strip()
         return node.route("voice", tr("Voice: {name} – {labels}. {reason}", name=voice["name"],
                                       labels=label_text(voice), reason=reason)
-                          + f"\nELEVENLABS_VOICE: {voice['voice_id']} ({voice['name']})")
+                          + f"\nELEVENLABS_VOICE: {voice['voice_id']} ({voice['name']})"
+                          + (f"\n\n---\n{passed}" if passed else ""))
 
     async def pick_auto(self, node, voices: list[dict], pre: str) -> tuple[dict, str]:
         listing = "\n".join(f"{v['voice_id']} | {v['name']} | {label_text(v)} | {v.get('description', '')}"
                             for v in voices[:120])
-        material = "\n\n".join(x for x in (node.instructions, node.input) if x)[:6000]
+        material = "\n\n".join(x for x in (node.instructions, material_of(node)) if x)[:6000]
         prompt = (f"Pick the ONE voice that fits best to speak this material – its mood, audience, language and "
                   f"the speaker it needs.\nPreselection by the user: {pre or '(none)'}\n\n"
-                  f"VOICES (id | name | labels | description):\n{listing}\n\nMATERIAL:\n{material or node.task}\n\n"
+                  f"VOICES (id | name | labels | description):\n{listing}\n\nMATERIAL:\n{material}\n\n"
                   'Answer only JSON: {"voice_id": "...", "reason": "one short sentence in the material\'s language"}')
         try:
             data = json_in(await self.ctx.ai.ask(prompt, system="You cast voices for audio productions.")) or {}
@@ -301,7 +347,7 @@ class Nodes:
 
     async def segments(self, node, emotions: bool) -> list[tuple[str, str]]:
         """The AI picks what is spoken and splits it into parts (scenes, speakers …)."""
-        material = node.input or node.task
+        material = VOICE_LINES.sub("", material_of(node)).strip()
         tags = (f"Add Eleven v3 audio tags where they help the delivery, sparingly (e.g. {', '.join(EMOTION_TAGS)}); "
                 "tags are English words in square brackets right before the words they colour. "
                 if emotions else "Do NOT add any tags, brackets or stage directions. ")

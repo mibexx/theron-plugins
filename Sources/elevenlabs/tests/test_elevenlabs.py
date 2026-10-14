@@ -286,6 +286,18 @@ def test_without_emotions_no_tags_and_the_chosen_model(env):
     assert files[0].suffix == ".wav" and files[0].read_bytes()[:4] == b"RIFF"
 
 
+def test_speech_gets_the_orchestrators_assignment_and_the_script_through_choose_voice(env):
+    """No instructions in the node: the step's assignment from the orchestrator and the script the writer handed to
+    Choose voice both reach Generate speech (the hand-over of Choose voice alone is just the voice)."""
+    store, pm, ctx, fake, ai, tmp = env
+    ctrl = make_run(store, pm, tmp, {"mode": "fixed", "voice_id": "Rach000000000001"})
+    asyncio.run(ctrl._execute(0, "pick the narrator"))
+    asyncio.run(ctrl._execute(1, "Speak only the NARRATOR lines, calm and slow"))
+    prompt = next(p for p in ai.prompts if "Prepare the spoken audio" in p)
+    assert "Speak only the NARRATOR lines, calm and slow" in prompt
+    assert "NARRATOR: Welcome to the show." in prompt and "ELEVENLABS_VOICE" not in prompt.split("MATERIAL:")[1]
+
+
 def test_not_enough_credits_goes_to_error_before_speaking(env):
     store, pm, ctx, fake, ai, tmp = env
     fake.used = fake.limit - 10
@@ -382,3 +394,67 @@ def test_splitting_long_text(env):
     voices = [{"name": "A", "labels": {"gender": "male"}}, {"name": "B", "labels": {"gender": "female"}}]
     assert [v["name"] for v in narrow(voices, "männlich")] == ["A"]
     assert [v["name"] for v in narrow(voices, "female")] == ["B"]
+
+
+def test_the_sample_button_next_to_the_voice_field_in_the_editor(env, monkeypatch):
+    """▶ next to the voice in the node's panel plays the voice's sample, ■ stops it – the plugin's own player."""
+    import importlib
+
+    from PySide6.QtWidgets import QApplication, QPushButton
+
+    from theron.ui import pickers
+    from theron.ui.plugins_ui import FieldButtons
+    from theron.ui.process_editor import ProcessEditor
+    store, pm, ctx, fake, ai, tmp = env
+    app = QApplication.instance() or QApplication([])
+    P = importlib.import_module(pm.plugins["elevenlabs"].module.__name__ + ".player")
+    started = []
+
+    class Proc:
+        def __init__(self, cmd, **kw):
+            started.append(cmd)
+            self.alive = True
+
+        def poll(self):
+            return None if self.alive else 0
+
+        def terminate(self):
+            self.alive = False
+    monkeypatch.setattr(P.subprocess, "Popen", Proc)
+    monkeypatch.setattr(P.sys, "platform", "darwin")
+    sample = tmp / "rachel.mp3"
+    sample.write_bytes(b"ID3")
+    monkeypatch.setattr(ctx.player, "local", lambda src: sample if src == "https://x/rachel.mp3" else Path("/nope"))
+    asyncio.run(ctx.voices.load())
+    pickers.ModelCatalog.refresh = lambda self, *a, **k: None
+    pickers.ModelCatalog.init(store)
+    ctrl = make_run(store, pm, tmp, {"mode": "fixed", "voice_id": "Rach000000000001"})
+    proc = store.get("process", store.get("project", store.run(ctrl.run_id)["project_id"])["process_id"])
+    ed = ProcessEditor(store)
+    ed.load(proc)
+    n = next(x for x in ed.nodes if x.step and x.step["id"] == "v")
+    ed.current = n
+    ed._show_plugin(n)
+    buttons = ed.pl_fields.findChildren(FieldButtons)
+    assert len(buttons) == 1   # only the voice field has one (and the speech node's voice field, not shown here)
+    button = buttons[0].findChildren(QPushButton)[0]
+
+    def wait(cond):
+        for _ in range(200):
+            app.processEvents()
+            if cond():
+                return True
+            time.sleep(0.01)
+        return False
+    assert button.text() == "▶ Sample"
+    button.click()
+    assert wait(lambda: started) and started == [["afplay", str(sample)]]
+    assert wait(lambda: button.text() == "■ Stop")
+    button.click()
+    assert wait(lambda: button.text() == "▶ Sample") and ctx.player.playing() == ""
+    # no voice chosen: the button says so instead of playing
+    kind, combo = ed.pl_inputs["voice_id"]
+    combo.addItem("–", "")
+    combo.setCurrentIndex(combo.count() - 1)
+    button.click()
+    assert wait(lambda: "Choose a voice first." in buttons[0].result.text())
