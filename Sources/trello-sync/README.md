@@ -3,10 +3,12 @@
 Syncs a Theron task list with a Trello board – in the direction you choose.
 
 **Setup:** Settings → Plugins → Trello Sync → *Settings …*: your Trello **API key** and **token**
-(https://trello.com/power-ups/admin → your Power-Up → API key, then “Token” on that page).
+(https://trello.com/power-ups/admin → your Power-Up → API key, then “Token” on that page). **Test connection** checks
+them right there – also before saving – and shows the account and how many open boards it has.
 
-**Use:** on the TASKS page select a task list and click **Sync with Trello**. Enter the board's id or link
-(`https://trello.com/b/AbCd1234/…`). The plugin reads the board, shows what it found and asks:
+**Use:** on the TASKS page select a task list and click **Sync with Trello**. Pick one of your boards from the list
+(▼) – or paste a board's id or link (`https://trello.com/b/AbCd1234/…`). The plugin reads the board, shows what it
+found and asks:
 
 - **Read (Trello → Theron)** – every list of the board becomes an epic, every card a requirement.
 - **Write (Theron → Trello)** – every epic becomes a list, every requirement a card.

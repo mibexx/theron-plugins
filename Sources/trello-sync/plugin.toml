@@ -1,6 +1,6 @@
 id = "trello-sync"
 name = "Trello Sync"
-version = "1.0.0"
+version = "1.0.1"
 description = "Syncs a Theron task list with a Trello board – read the board into the list or write the list to the board. A “Sync with Trello” button on the task-list page."
 author = "Mike Bertram · mibexx"
 license = "MIT"

@@ -56,7 +56,12 @@ class FakeTrello:
             return Response(url, 401, {}, b"invalid key")
         parts = path.strip("/").split("/")
         out, status = None, 200
-        if method == "GET" and parts[0] == "boards":
+        if method == "GET" and parts == ["members", "me"]:
+            out = {"fullName": "Ada Lovelace", "username": "ada"}
+        elif method == "GET" and parts == ["members", "me", "boards"]:
+            out = [{"id": b["id"], "name": b["name"], "url": b["url"], "closed": b["closed"]}
+                   for b in self.boards.values()]
+        elif method == "GET" and parts[0] == "boards":
             board = self.boards.get(parts[1]) or next((b for b in self.boards.values() if b["id"] == parts[1]), None)
             if board is None:
                 return Response(url, 404, {}, b"not found")
@@ -237,7 +242,13 @@ def test_the_whole_flow_in_the_app_window(env, monkeypatch):
     monkeypatch.setattr(plugins.PluginManager, "start", lambda self: None)
     fake.add_card(fake.add_list("Login"), "Form")
     asked = []
-    monkeypatch.setattr(type(ctx.ui), "ask_text", lambda self, title, text, default="": asked.append(text) or "AbCd1234")
+    offered = []
+
+    def ask_text(self, title, text, default="", suggestions=None):
+        asked.append(text)
+        offered.extend(suggestions or [])
+        return suggestions[0]   # the user picks the board from the list
+    monkeypatch.setattr(type(ctx.ui), "ask_text", ask_text)
     monkeypatch.setattr(type(ctx.ui), "ask_choice", lambda self, title, text, options: asked.append(text) or options[0])
     notes = []
     monkeypatch.setattr(type(ctx), "notify", lambda self, text, level="info": notes.append(text))
@@ -254,7 +265,76 @@ def test_the_whole_flow_in_the_app_window(env, monkeypatch):
         app.processEvents()
         time.sleep(0.02)
     assert any("Read from Trello: 1 new" in n for n in notes), notes
-    assert "Board id or link" in asked[0] and "Board “Shop”: 1 lists, 1 cards." in asked[1]
+    assert offered == ["Shop · https://trello.com/b/AbCd1234/shop"], offered
+    assert "Pick a board" in asked[0] and "Board “Shop”: 1 lists, 1 cards." in asked[1]
     assert [r["title"] for e in ctx.tasklists.get(tl)["epics"] for r in e["requirements"]] == ["Form"]
     assert btn.text() == "▦ ⟳ Sync"
     w.close()
+
+
+def test_the_settings_test_button(env):
+    """“Test connection” in the plugin settings checks what is in the dialog – saved or not."""
+    store, pm, ctx, fake, tl, _ = env
+    (button,) = pm.settings_buttons_for("trello-sync")
+    assert button.label == "Test connection"
+
+    def press(values):
+        out = button.run(values)
+        return asyncio.run(out) if asyncio.iscoroutine(out) else out
+    assert press({"api_key": "k", "token": "t"}) == (True, "Connected as Ada Lovelace · open boards: 1")
+    ok, text = press({"api_key": "k", "token": "wrong"})
+    assert not ok and "refused" in text
+    ok, text = press({"api_key": "", "token": "t"})
+    assert not ok and "first" in text
+    assert not fake.calls[-1:] or fake.calls[-1] == ("GET", "/members/me")   # nothing sent without a key
+
+
+def test_a_wrong_token_is_said_before_asking_for_a_board(env, monkeypatch):
+    import time
+
+    from PySide6.QtWidgets import QApplication
+    store, pm, ctx, fake, tl, _ = env
+    app = QApplication.instance() or QApplication([])
+    ctx.settings.update({"token": "wrong"})
+    shown, asked, queued = [], [], []
+    monkeypatch.setattr(pm, "ui_invoke", queued.append)   # what the window does: run it on the UI thread
+    monkeypatch.setattr(type(ctx.ui), "message", lambda self, title, text, level="info": shown.append(text))
+    monkeypatch.setattr(type(ctx.ui), "ask_text", lambda self, *a, **k: asked.append(a))
+    (sync_btn, _unlink) = pm.actions_for("tasks")
+    sync_btn.run({"tasklist_id": tl})
+    end = time.time() + 5
+    while time.time() < end and not shown:
+        app.processEvents()
+        while queued:
+            queued.pop(0)()
+        time.sleep(0.02)
+    assert shown and "refused" in shown[0] and not asked
+
+
+def test_the_test_button_in_the_settings_dialog(env):
+    """In Settings → Plugins → Trello Sync → Settings …: the typed (unsaved) token is what's tested."""
+    import time
+
+    from PySide6.QtWidgets import QApplication
+
+    from theron.ui.plugins_ui import PluginSettingsDialog
+    store, pm, ctx, fake, tl, _ = env
+    app = QApplication.instance() or QApplication([])
+    dlg = PluginSettingsDialog(store, pm.plugins["trello-sync"])
+    assert [b.text() for b in dlg.button_widgets] == ["Test connection"]
+
+    def press():
+        dlg.result.setText("")
+        dlg.button_widgets[0].click()
+        end = time.time() + 5
+        while time.time() < end and not dlg.result.text().startswith(("✔", "✖")):
+            app.processEvents()
+            time.sleep(0.02)
+        return dlg.result.text()
+    dlg.inputs["token"][1].setText("wrong")
+    assert press().startswith("✖") and "refused" in dlg.result.text()
+    dlg.inputs["token"][1].setText("t")
+    assert press() == "✔ Connected as Ada Lovelace · open boards: 1"
+    if os.environ.get("TRELLO_SHOT"):
+        dlg.grab().save(os.environ["TRELLO_SHOT"])
+    dlg.reject()

@@ -1,19 +1,25 @@
 """Trello Sync – a Theron task list ↔ a Trello board.
 
-On the task-list page (TASKS) a button “Sync with Trello” appears for the selected list: enter the board's id or link,
+On the task-list page (TASKS) a button “Sync with Trello” appears for the selected list: pick one of your boards (or
+paste a board's id or link),
 the plugin reads the board, says what it found and asks for the direction – read (Trello → Theron) or write
 (Theron → Trello). After that the button is “⟳ Sync” and syncs again in that direction; “Unlink Trello” removes the
-link. The API key and token are in the plugin's settings (Settings → Plugins → Trello Sync → Settings …).
+link. The API key and token are in the plugin's settings (Settings → Plugins → Trello Sync → Settings …), where
+“Test connection” checks them.
 """
 
 from __future__ import annotations
 
 from .sync import TaskListSync
-from .trello import TrelloError
+from .trello import TrelloAuthError, TrelloError
 
 
 def register(ctx):
     sync = TaskListSync(ctx)
+    if hasattr(ctx.settings, "add_button"):   # Theron ≥ 0.17
+        ctx.settings.add_button(ctx.tr("Test connection"),
+                                lambda values: sync.trello.test(values.get("api_key", ""), values.get("token", "")),
+                                id="test", tooltip=ctx.tr("Checks the API key and token with Trello (also unsaved)"))
     if not ctx.ui.available:   # the buttons live in the desktop app – nothing to do on a slave
         return
 
@@ -41,7 +47,30 @@ def register(ctx):
         if sync.link(tid):
             start(tid)
             return
-        raw = ctx.ui.ask_text(ctx.tr("Sync with Trello"), ctx.tr("Board id or link of the Trello board:"))
+        ctx.notify(ctx.tr("Loading your Trello boards …"))
+
+        async def boards():
+            try:
+                return await sync.trello.my_boards(), ""
+            except TrelloAuthError as exc:
+                return None, str(exc)
+            except Exception:  # noqa: BLE001 – no list, the user pastes the link instead
+                return [], ""
+        future = ctx.spawn(boards)
+        future.add_done_callback(lambda f: ctx.ui.call(ask_board, tid, *f.result()))
+
+    def ask_board(tid, boards, error):
+        title = ctx.tr("Sync with Trello")
+        if boards is None:   # wrong key/token – asking for a board makes no sense
+            ctx.ui.message(title, error, "error")
+            return
+        choices = [f"{b.get('name', '')} · {b.get('url', '')}" for b in boards if b.get("url")]
+        text = ctx.tr("Pick a board or paste the id or link of a Trello board:") if choices else \
+            ctx.tr("Board id or link of the Trello board:")
+        try:
+            raw = ctx.ui.ask_text(title, text, suggestions=choices) if choices else ctx.ui.ask_text(title, text)
+        except TypeError:   # Theron < 0.19.1 has no suggestions
+            raw = ctx.ui.ask_text(title, ctx.tr("Board id or link of the Trello board:"))
         if not raw:
             return
         ctx.notify(ctx.tr("Reading the Trello board …"))
