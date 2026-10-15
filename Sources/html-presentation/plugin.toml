@@ -1,0 +1,24 @@
+id = "html-presentation"
+name = "HTML Presentation"
+version = "1.0.0"
+description = "A process node that builds a presentation as ONE HTML file: always one 16:9 slide on the screen, as large as the screen allows – optionally in several languages (switch), light / dark / both (switch), a slide cursor at the top or bottom and the arrow keys. Content, style / CI and templates like the HTML Builder."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.20.0"
+entry = "html_presentation"
+permissions = ["ai", "files", "ui"]
+
+[[settings]]
+key = "template_dir"
+type = "text"
+label = "Template folder"
+description = "Where your templates live when a node names no folder of its own. Empty: the plugin's own folder (open it with 📂 in the node)."
+
+[[settings]]
+key = "model"
+type = "choice"
+label = "Model"
+default = "sonnet"
+options = ["sonnet", "opus", "haiku"]
+description = "The Claude model that writes the slides (your Claude subscription)."

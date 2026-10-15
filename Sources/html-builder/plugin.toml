@@ -1,0 +1,24 @@
+id = "html-builder"
+name = "HTML Builder"
+version = "1.0.0"
+description = "A process node that builds one clean, self-contained HTML document from a description of its content – optionally for an audience, in a style / CI and after a template from your template folder. Checked before it goes on; put it behind a loop for several documents."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.20.0"
+entry = "html_builder"
+permissions = ["ai", "files", "ui"]
+
+[[settings]]
+key = "template_dir"
+type = "text"
+label = "Template folder"
+description = "Where your templates live when a node names no folder of its own. Empty: the plugin's own folder (open it with 📂 in the node)."
+
+[[settings]]
+key = "model"
+type = "choice"
+label = "Model"
+default = "sonnet"
+options = ["sonnet", "opus", "haiku"]
+description = "The Claude model that writes the documents (your Claude subscription)."

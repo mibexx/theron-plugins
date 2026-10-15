@@ -1,0 +1,41 @@
+id = "drawio"
+name = "draw.io Diagrams"
+version = "1.0.0"
+description = "A process node that draws a diagram from a description – flowchart, sequence, class, ER, architecture, mind map … (chosen from the description or fixed in the node). Writes the .drawio file and a PNG (own renderer, draw.io desktop or draw.io in Docker); the picture shows in the chat, a click opens it large."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.20.0"
+entry = "drawio_diagrams"
+permissions = ["ai", "files", "ui"]
+
+[[settings]]
+key = "exporter"
+type = "choice"
+label = "draw.io"
+default = "builtin"
+options = [{value = "builtin", label = "Draw it myself (built-in renderer)"},
+           {value = "desktop", label = "Use the desktop app"},
+           {value = "docker", label = "Load via Docker"}]
+description = "Who makes the PNG. Draw it myself: the plugin's own renderer – works everywhere, nothing to install. Desktop: the installed draw.io app (exactly like draw.io). Docker: draw.io headless in a container (exactly like draw.io, needs Docker; “Load Docker image” fetches it once)."
+
+[[settings]]
+key = "drawio_path"
+type = "text"
+label = "draw.io app (optional)"
+description = "Only for “Use the desktop app”: the program if it isn't found by itself, e.g. /Applications/draw.io.app/Contents/MacOS/draw.io"
+
+[[settings]]
+key = "docker_image"
+type = "text"
+label = "Docker image"
+default = "rlespinasse/drawio-desktop-headless:latest"
+description = "Only for “Load via Docker”: the image with draw.io headless."
+
+[[settings]]
+key = "model"
+type = "choice"
+label = "Model"
+default = "sonnet"
+options = ["sonnet", "opus", "haiku"]
+description = "The Claude model that draws the diagrams (your Claude subscription)."

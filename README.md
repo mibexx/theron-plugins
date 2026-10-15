@@ -35,6 +35,32 @@ The smallest useful plugin – to try out how plugins work.
 
 Source: [`Sources/hello-world`](Sources/hello-world) · Package: [`Plugins/hello-world.theronplugin`](Plugins/hello-world.theronplugin)
 
+### 🧱 HTML Builder · `html-builder`
+
+One clean, self-contained HTML document per run of the node **Build HTML** – from a description, optionally for an
+audience, in a style / CI and after a template of your template folder (📂 / ＋ right in the node). Checked before it
+goes on (✔ Document · ✖ Error); behind a loop for several documents. Needs Theron 0.20.0.
+
+Source: [`Sources/html-builder`](Sources/html-builder) · Package: [`Plugins/html-builder.theronplugin`](Plugins/html-builder.theronplugin)
+
+### 📐 draw.io Diagrams · `drawio`
+
+One diagram per run of the node **Draw diagram** – flowchart, sequence, class, ER, architecture, mind map … (fixed in
+the node or taken from the description): the `.drawio` file and a PNG. The picture shows in the chat, a click opens it
+large. The PNG comes from the plugin's own renderer, the draw.io desktop app or draw.io in Docker (settings – each
+checked when you choose it). Needs Theron 0.20.0.
+
+Source: [`Sources/drawio`](Sources/drawio) · Package: [`Plugins/drawio.theronplugin`](Plugins/drawio.theronplugin)
+
+### 📽 HTML Presentation · `html-presentation`
+
+One presentation per run of the node **Build presentation** – one HTML file: always one 16:9 slide, as large as the
+screen allows; multilingual with a switch, light / dark / both with a switch, slide cursor top or bottom, arrow keys –
+each fixed in the node or read from the input. Content, style / CI and templates like the HTML Builder. Needs Theron
+0.20.0.
+
+Source: [`Sources/html-presentation`](Sources/html-presentation) · Package: [`Plugins/html-presentation.theronplugin`](Plugins/html-presentation.theronplugin)
+
 ### ▦ Trello Sync · `trello-sync`
 
 Syncs a Theron task list with a Trello board – needs Theron 0.16.0.
