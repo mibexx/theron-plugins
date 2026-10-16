@@ -25,16 +25,6 @@ build, commit and push – that's all.
 
 ## The plugins
 
-### 👋 Hello World · `hello-world`
-
-The smallest useful plugin – to try out how plugins work.
-
-- **Navigation entry “Hello World”** – a page of its own in Theron's sidebar.
-- **Process node “Hello World”** – one input, ✔ and ✖ outputs. It outputs “Hello World” and the process carries on
-  via ✔ (whatever came in goes along).
-
-Source: [`Sources/hello-world`](Sources/hello-world) · Package: [`Plugins/hello-world.theronplugin`](Plugins/hello-world.theronplugin)
-
 ### 🧱 HTML Builder · `html-builder`
 
 One clean, self-contained HTML document per run of the node **Build HTML** – from a description, optionally for an

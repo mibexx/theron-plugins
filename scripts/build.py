@@ -2,7 +2,7 @@
 """Pack every plugin in Sources/ into Plugins/<id>.theronplugin – signed, if a key is there.
 
     python scripts/build.py                     all plugins
-    python scripts/build.py hello-world         only these
+    python scripts/build.py google-serp chrome  only these
     python scripts/build.py --sign KEY          sign with KEY (default: ~/.config/theron/plugin-signing/official.key, if it exists)
     python scripts/build.py --no-sign
 
