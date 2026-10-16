@@ -23,6 +23,9 @@ class FakeGoogle:
         self.calls = []
         self.total = 35
         self.left = 100
+        self.gemini_key = "gem"
+        self.gemini_calls = []
+        self.grounding_quota = 10
 
     async def request(self, method, url, *, params=None, headers=None, json=None, **kw):
         u = urllib.parse.urlparse(url)
@@ -31,6 +34,11 @@ class FakeGoogle:
 
         def answer(status, body):
             return Response(url, status, {}, __import__("json").dumps(body).encode())
+        if u.netloc == "vertexaisearch.cloud.google.com":   # Google's redirect links of grounding
+            target = "https://" + u.path.rsplit("/", 1)[1] + ".example/page"
+            return Response(target, 200, {}, b"<html></html>")
+        if u.netloc == "generativelanguage.googleapis.com":
+            return self.gemini(method, u.path, p, headers or {}, json, answer)
         if u.netloc + u.path != "www.googleapis.com/customsearch/v1":
             return answer(404, {})
         if p.get("key") != self.key:
@@ -47,6 +55,34 @@ class FakeGoogle:
         items = [{"title": f"{p['q']} #{i + 1}", "link": f"https://site{i + 1}.example/{p['q'].split()[0]}",
                   "snippet": f"about\n{p['q']}"} for i in range(start, min(start + int(p["num"]), self.total))]
         return answer(200, {"kind": "customsearch#search", **({"items": items} if items else {})})
+
+
+    def gemini(self, method, path, params, headers, body, answer):
+        self.gemini_calls.append((method, path, body))
+        if headers.get("x-goog-api-key") != self.gemini_key:
+            return answer(400, {"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.",
+                                          "status": "INVALID_ARGUMENT"}})
+        if path == "/v1beta/models":
+            return answer(200, {"models": [
+                {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-3-pro", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-flash-latest", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/text-embedding-004", "supportedGenerationMethods": ["embedContent"]}]})
+        if path.endswith(":generateContent"):
+            if self.grounding_quota <= 0:
+                return answer(429, {"error": {"code": 429, "message": "Resource has been exhausted (e.g. check quota).",
+                                              "status": "RESOURCE_EXHAUSTED"}})
+            self.grounding_quota -= 1
+            assert body["tools"] == [{"google_search": {}}]
+            redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/"
+            return answer(200, {"candidates": [{"content": {"parts": [{"text": "Qdrant und Milvus führen 2026 [1][2]."}]},
+                                                "finishReason": "STOP", "groundingMetadata": {
+                "webSearchQueries": ["beste vektordatenbank 2026"],
+                "groundingChunks": [{"web": {"uri": redirect + "qdrant", "title": "qdrant.tech"}},
+                                    {"web": {"uri": redirect + "milvus", "title": "milvus.io"}},
+                                    {"web": {"uri": redirect + "qdrant", "title": "qdrant.tech"}},
+                                    {"web": {"uri": "https://direct.example/x", "title": "direct.example"}}]}}]})
+        return answer(404, {"error": {"code": 404, "message": "models/x is not found", "status": "NOT_FOUND"}})
 
 
 class FakeAi:
@@ -142,9 +178,64 @@ def test_the_test_button_and_the_costs(env):
     (button,) = pm.settings_buttons_for("google-search")
     run = lambda values: asyncio.run(button.run(values))  # noqa: E731
     assert run({"api_key": "good"})[0] is False
-    ok, text = run({"api_key": "good", "cx": "cx1"})
-    assert ok and "10 results" in text and "$5 per 1,000" in text
-    ok, text = run({"api_key": "wrong", "cx": "cx1"})
-    assert not ok and "API key not valid" in text
+    ok, text = run({"api_key": "good", "cx": "cx1", "gemini_key": "gem"})
+    assert ok and "Custom Search ✔ · 10 results" in text and "$5 per 1,000" in text and "Gemini ✔ · 3 models" in text
+    assert ctx.storage.get("models")["models"][0] == "gemini-flash-latest"   # aliases first, no embedding model
+    ok, text = run({"api_key": "wrong", "cx": "cx1", "gemini_key": "gem"})
+    assert not ok and "Custom Search ✖ API key not valid" in text and "Gemini ✔" in text
+    ok, text = run({"gemini_key": "wrong"})
+    assert not ok and "Gemini ✖" in text and "Custom Search" not in text
     key = next(s for s in pm.plugins["google-search"].manifest.settings if s.key == "api_key")
     assert "$5 per 1,000" in key.description and "2027" in key.description
+
+
+def run_research(store, pm, tmp, cfg=None, text="Welche Vektordatenbank ist 2026 die beste?"):
+    node = pm.node("google-search/research")
+    cfg = {**node.defaults(), **(cfg or {})}
+    pid = store.save("process", {"name": "Recherche", "start": "s", "steps": [
+        {"id": "s", "type": "plugin", "plugin_node": node.id, "plugin_config": cfg, "plugin_outputs": "ports",
+         "plugin_ports": node.ports(cfg), "plugin_routes": {"answer": "n", "error": "x"}},
+        {"id": "n", "agent_id": None, "on_success": "end"}, {"id": "x", "agent_id": None, "on_success": "end"}]})
+    proj = store.save("project", {"name": "R", "workspace": str(tmp / "ws"), "process_id": pid})
+    ctrl = Engine(store).controller(store.create_run(proj, "Recherche"))
+    store.update_run(ctrl.run_id, inbox={"s": [{"id": "h1", "from": "Planer", "agent": "Planer", "text": text}]})
+    asyncio.run(ctrl._execute(0, ""))
+    return store.run(ctrl.run_id).get("inbox") or {}, ctrl
+
+
+def test_research_answers_with_real_source_urls(env):
+    store, pm, ctx, fake, ai, tmp = env
+    ctx.settings.update({"gemini_key": "gem"})
+    inbox, ctrl = run_research(store, pm, tmp)
+    text = inbox["n"][0]["text"]
+    urls = text.split("URLS:\n")[1].split("\n\n")[0].splitlines()
+    assert urls == ["https://qdrant.example/page", "https://milvus.example/page", "https://direct.example/x"]
+    assert "ANSWER:\nQdrant und Milvus führen 2026 [1][2]." in text and "[1] qdrant.tech – https://qdrant.example/page" in text
+    assert "beste vektordatenbank 2026" in text
+    method, path, body = fake.gemini_calls[-1]
+    assert path == "/v1beta/models/gemini-flash-latest:generateContent" and "Welche Vektordatenbank" in \
+        body["contents"][0]["parts"][0]["text"]
+    said = [e for e in store.events(ctrl.run_id) if e["type"] == "plugin_message"][0]["text"]
+    assert "Qdrant und Milvus" in said and "(https://www.google.com/search?q=beste+vektordatenbank+2026)" in said
+
+
+def test_research_only_urls_and_the_api_key_as_fallback(env):
+    store, pm, ctx, fake, ai, tmp = env
+    fake.gemini_key = "good"   # one Google Cloud key for both APIs
+    inbox, _ = run_research(store, pm, tmp, {"result": "urls", "max_sources": 2, "resolve": False})
+    text = inbox["n"][0]["text"]
+    assert "ANSWER:" not in text
+    assert text.split("URLS:\n")[1].split("\n\n")[0].splitlines() == [
+        "https://vertexaisearch.cloud.google.com/grounding-api-redirect/qdrant",
+        "https://vertexaisearch.cloud.google.com/grounding-api-redirect/milvus"]
+
+
+def test_research_errors(env):
+    store, pm, ctx, fake, ai, tmp = env
+    ctx.settings.update({"api_key": "", "gemini_key": ""})
+    inbox, _ = run_research(store, pm, tmp)
+    assert "No Gemini API key" in inbox["x"][0]["text"]
+    ctx.settings.update({"gemini_key": "gem"})
+    fake.grounding_quota = 0
+    inbox, _ = run_research(store, pm, tmp)
+    assert "Resource has been exhausted" in inbox["x"][0]["text"]

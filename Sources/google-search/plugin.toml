@@ -1,7 +1,7 @@
 id = "google-search"
 name = "Google Search"
-version = "1.0.0"
-description = "A process node that searches Google with the Custom Search JSON API (Google Cloud) – the query comes from the input – and hands on the URLs of the hits; how many is set in the node or read from the input. For existing API customers: Google takes no new ones and switches the API off on 1 January 2027."
+version = "1.1.0"
+description = "Google's own APIs as process nodes: Google Search with the Custom Search JSON API – the URLs of the hits, how many set in the node or read from the input (Google switches it off on 1 January 2027) – and Google research with Gemini (Grounding with Google Search): a sourced answer, or only the source URLs."
 author = "Mike Bertram · mibexx"
 license = "MIT"
 theron_api = 1
@@ -12,16 +12,20 @@ permissions = ["network", "ai"]
 [[settings]]
 key = "api_key"
 type = "secret"
-label = "Google API key"
-description = "Google Cloud console → APIs & Services → Credentials → API key, in a project with the “Custom Search API” enabled. Cost (Google): 100 queries per day free, then $5 per 1,000 – at most 10,000 per day; one query = up to 10 results. Google closed the API to new customers and switches it off on 1 January 2027."
-required = true
+label = "Google API key (Custom Search)"
+description = "For the node “Google Search”. Google Cloud console → APIs & Services → Credentials → API key, in a project with the “Custom Search API” enabled. Cost (Google): 100 queries per day free, then $5 per 1,000 – at most 10,000 per day; one query = up to 10 results. Google closed the API to new customers and switches it off on 1 January 2027."
 
 [[settings]]
 key = "cx"
 type = "text"
 label = "Search engine ID (cx)"
-description = "programmablesearchengine.google.com → your search engine → Overview → “Search engine ID”. For the whole web, switch on “Search the entire web” there."
-required = true
+description = "For the node “Google Search”: programmablesearchengine.google.com → your search engine → Overview → “Search engine ID”. For the whole web, switch on “Search the entire web” there."
+
+[[settings]]
+key = "gemini_key"
+type = "secret"
+label = "Gemini API key (research)"
+description = "For the node “Google research (Gemini)”: aistudio.google.com → Get API key (or a Google Cloud key with the “Generative Language API” enabled). Empty: the Google API key above. Cost (Google, grounded requests with Google Search): a free amount per month (Gemini 3) or day (older models), then about $14–35 per 1,000 depending on the model – plus the model's tokens; see ai.google.dev/pricing."
 
 [[settings]]
 key = "country"
