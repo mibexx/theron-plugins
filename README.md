@@ -61,6 +61,15 @@ each fixed in the node or read from the input. Content, style / CI and templates
 
 Source: [`Sources/html-presentation`](Sources/html-presentation) · Package: [`Plugins/html-presentation.theronplugin`](Plugins/html-presentation.theronplugin)
 
+### 🔎 Google SERP · `google-serp`
+
+The node **Google search** asks Google and hands on the URLs of the hits – the query is written by the AI from the
+input, taken as it is or built from a template; the number of results is fixed in the node or read from the input
+(“top 20”). Via SerpApi or Serper with your API key (settings, with **Test** and the average cost per 1,000 searches).
+Needs Theron 0.20.0.
+
+Source: [`Sources/google-serp`](Sources/google-serp) · Package: [`Plugins/google-serp.theronplugin`](Plugins/google-serp.theronplugin)
+
 ### ▦ Trello Sync · `trello-sync`
 
 Syncs a Theron task list with a Trello board – needs Theron 0.16.0.

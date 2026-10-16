@@ -1,0 +1,39 @@
+id = "google-serp"
+name = "Google SERP"
+version = "1.0.0"
+description = "A process node that asks Google – the query comes from the input – and hands on the URLs of the hits; how many is set in the node or read from the input. Via SerpApi or Serper with your API key."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.20.0"
+entry = "google_serp"
+permissions = ["network", "ai"]
+
+[[settings]]
+key = "provider"
+type = "choice"
+label = "Provider"
+default = "serpapi"
+options = [{ value = "serpapi", label = "SerpApi (serpapi.com)" }, { value = "serper", label = "Serper (serper.dev)" }]
+description = "Average cost per 1,000 searches (October 2026, depends on the plan): SerpApi ≈ $25 (Starter, 1,000/month) down to ≈ $9 (Big Data, 30,000/month), 250 free per month · Serper ≈ $1.00 (50k credits) down to ≈ $0.30 (12.5M credits), 2,500 free once. One search = up to 10 results."
+
+[[settings]]
+key = "api_key"
+type = "secret"
+label = "Google SERP API key"
+description = "serpapi.com → Dashboard → Your Private API Key, or serper.dev → API Key."
+required = true
+
+[[settings]]
+key = "country"
+type = "text"
+label = "Country"
+default = "de"
+description = "Two letters like de, us, ch – which country's Google answers. Empty: Google decides. A node can set its own."
+
+[[settings]]
+key = "language"
+type = "text"
+label = "Language"
+default = "de"
+description = "Two letters like de or en. Empty: Google decides. A node can set its own."
