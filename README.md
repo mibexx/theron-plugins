@@ -1,6 +1,6 @@
 # Theron Plugins
 
-Plugins for [Theron](https://theron.mibexx.de) by mibexx.
+Plugins for [Theron](https://www.theron-ai.de) by mibexx.
 
 | Folder | Content |
 |---|---|
@@ -9,16 +9,16 @@ Plugins for [Theron](https://theron.mibexx.de) by mibexx.
 
 **Install a plugin:** in Theron (0.18+) *Settings → Plugins → “Official plugins …”* – one click installs or updates,
 older versions can be picked, too (`theron plugin install <id>[@version]` / `theron plugin update` in the console).
-Or download it from the [plugin catalog](https://theron.mibexx.de/plugins.html) (or its file from `Plugins/`) and use
+Or download it from the [plugin catalog](https://www.theron-ai.de/plugins.html) (or its file from `Plugins/`) and use
 *“Upload plugin …”* / `theron plugin install Plugins/<id>.theronplugin`. Restart Theron afterwards.
 
 **Build:** `python scripts/build.py` packs every plugin of `Sources/` into `Plugins/` (signed with the mibexx key if it
 is on the machine). New plugins start from the [plugin skeleton](https://github.com/mibexx/theron-plugin-sekeleton);
 the plugin API is documented there in `docs/`.
 
-The [plugin catalog](https://theron.mibexx.de/plugins.html) on the Theron website lists every package in `Plugins/`
+The [plugin catalog](https://www.theron-ai.de/plugins.html) on the Theron website lists every package in `Plugins/`
 with its description and README – it checks this repo every 15 minutes, so a pushed plugin shows up there by itself.
-The plugin server [plugins.theron.mibexx.de](https://plugins.theron.mibexx.de/v1/plugins) – where Theron's “Official
+The plugin server [plugins.theron-ai.de](https://plugins.theron-ai.de/v1/plugins) – where Theron's “Official
 plugins” come from – does the same and also keeps every version: each commit that changed a package in `Plugins/` is
 a version (the newest commit wins if a version was rebuilt). So: raise the version in `plugin.toml` for every release,
 build, commit and push – that's all.
