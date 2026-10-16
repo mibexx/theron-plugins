@@ -24,7 +24,6 @@
   "The content (cut at the limit below)": "Den Inhalt (gekürzt auf das Limit unten)",
   "Only titles and file paths": "Nur Titel und Dateipfade",
   "Characters per page": "Zeichen pro Seite",
-  "Longer pages are cut in the hand-over – the file always has everything.": "Längere Seiten werden in der Übergabe gekürzt – die Datei enthält immer alles.",
   "No URLs in the input – put Google SERP before this node or list them in the node.": "Keine URLs im Input – setz Google SERP vor diesen Node oder trag sie im Node ein.",
   "starts Chrome …": "startet Chrome …",
   "Chrome: {error}": "Chrome: {error}",
@@ -73,5 +72,6 @@
   "Wait for bot checks (seconds)": "Auf Bot-Prüfungen warten (Sekunden)",
   "Many checks (“Just a moment …”) let a real browser through by themselves after a few seconds.": "Viele Prüfungen („Just a moment …“) lassen einen echten Browser nach ein paar Sekunden von selbst durch.",
   "Browser path (optional)": "Browser-Pfad (optional)",
-  "Empty: Google Chrome, else Chromium, Edge or Brave – whichever is installed. The plugin uses its own profile, never yours: cookies and logins of the scraper stay there (“Open browser”).": "Leer: Google Chrome, sonst Chromium, Edge oder Brave – was installiert ist. Das Plugin nutzt ein eigenes Profil, nie deins: Cookies und Logins des Scrapers bleiben dort („Browser öffnen“)."
+  "Empty: Google Chrome, else Chromium, Edge or Brave – whichever is installed. The plugin uses its own profile, never yours: cookies and logins of the scraper stay there (“Open browser”).": "Leer: Google Chrome, sonst Chromium, Edge oder Brave – was installiert ist. Das Plugin nutzt ein eigenes Profil, nie deins: Cookies und Logins des Scrapers bleiben dort („Browser öffnen“).",
+  "0 = an equal share: Theron hands on about 12,000 characters in all, so longer pages are cut – the files always have everything (an agent behind can read them).": "0 = gleicher Anteil: Theron gibt insgesamt etwa 12.000 Zeichen weiter, längere Seiten werden gekürzt – die Dateien enthalten immer alles (ein Agent dahinter kann sie lesen)."
 }

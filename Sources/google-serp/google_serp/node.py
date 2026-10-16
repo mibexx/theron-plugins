@@ -7,6 +7,8 @@ import re
 
 from .api import MAX_RESULTS, Client, SerpError
 
+HANDOVER = 11_500   # Theron passes a plugin's hand-over on with at most 12,000 characters
+
 COUNT_IN_TEXT = re.compile(
     r"(?:\b(?:top|die|the|first|ersten?)\s+(\d{1,3})\b)"
     r"|(?:\b(\d{1,3})\s*(?:urls?|treffer|ergebnisse|results|hits|links|seiten|websites?|quellen|sources)\b)"
@@ -164,10 +166,17 @@ class SearchNode:
         node.say(text=tr("🔎 **{query}** – {n} results ({pages} searches)", query=query, n=len(results),
                          pages=pages) + "\n\n" + lines)
         node.progress(tr("🔎 {n} URLs", n=len(results)))
-        listing = "\n".join(f"{i}. {r['title']} – {r['url']}" + (f"\n   {r['snippet']}" if r["snippet"] else "")
-                            for i, r in enumerate(results, 1))
-        return node.route("urls", tr("Google search “{query}” – {n} results:", query=query, n=len(results))
-                          + f"\n{listing}\n\nURLS:\n" + "\n".join(r["url"] for r in results))
+        # Theron passes at most HANDOVER characters on: the URLs first, then as many titles / snippets as fit
+        text = tr("Google search “{query}” – {n} results:", query=query, n=len(results)) + \
+            "\n\nURLS:\n" + "\n".join(r["url"] for r in results) + "\n\n"
+        for i, r in enumerate(results, 1):
+            line = f"{i}. {r['title']} – {r['url']}" + (f"\n   {r['snippet']}" if r["snippet"] else "") + "\n"
+            if len(text) + len(line) > HANDOVER:
+                line = f"{i}. {r['title']} – {r['url']}\n"
+                if len(text) + len(line) > HANDOVER:
+                    break
+            text += line
+        return node.route("urls", text.rstrip())
 
 
 def _one_line(text: str) -> str:

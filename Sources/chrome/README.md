@@ -15,10 +15,10 @@ reads and summarises them.
 | **URLs** | one per line – empty: the URLs of the input (the `URLS:` list of Google SERP, else every link in it) |
 | **At most pages** | default 10, 0 = all |
 | **Folder** | default `scraped/` in the project's workspace – one `.md` / `.html` per page; empty = no files |
-| **Hand on** | the **content** (cut at *Characters per page*, default 20,000 – the file has everything) or **only titles and file paths** |
+| **Hand on** | the **content** or **only titles and file paths**. Theron hands on about 12,000 characters per step in all: the file list comes first, then each page gets an equal share (or *Characters per page*) – the files always have everything, an agent behind the node can read them |
 
-Outputs: **Pages** (at least one page loaded – the pages, then *Not scraped:* with the reason for each one that
-failed, then `FILES:` one path per line) and **Error** (no page at all). The chat lists the pages as links.
+Outputs: **Pages** (at least one page loaded – first `FILES:` one path per line, then *Not scraped:* with the
+reason for each one that failed, then the pages) and **Error** (no page at all). The chat lists the pages as links.
 
 ## Like a person
 

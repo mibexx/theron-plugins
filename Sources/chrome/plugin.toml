@@ -1,6 +1,6 @@
 id = "chrome"
 name = "Chrome Scraper"
-version = "1.0.0"
+version = "1.0.1"
 description = "A process node that opens web pages in your own Chrome – behaving like a person, so bot protection sees a normal visitor – and hands on their content as clean Markdown or raw HTML. Works with the URLs of Google SERP; headless on a server, too."
 author = "Mike Bertram · mibexx"
 license = "MIT"

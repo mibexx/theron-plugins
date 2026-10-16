@@ -105,7 +105,7 @@ def test_the_ai_writes_the_query_and_the_urls_go_on(env):
     out, inbox, ctrl = run_node(store, pm, tmp)
     text = inbox["n"][0]["text"]
     assert "beste vektordatenbanken 2026" in text and "URLS:\n" in text
-    urls = text.split("URLS:\n")[1].strip().splitlines()
+    urls = text.split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()
     assert len(urls) == 10 and urls[0] == "https://site1.example/beste"
     assert len([c for c in fake.calls if c[1] == "serpapi.com/search.json"]) == 1   # 10 = one search
     q = fake.calls[0][2]
@@ -118,7 +118,7 @@ def test_count_from_the_input_pages_through_google(env):
     store, pm, ctx, fake, ai, tmp = env
     out, inbox, _ = run_node(store, pm, tmp, {"count_mode": "input", "query_mode": "input"},
                              text="vector database benchmark – gib mir die top 25 URLs")
-    urls = inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()
+    urls = inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()
     assert len(urls) == 25 and len(set(urls)) == 25
     starts = [c[2]["start"] for c in fake.calls if c[1] == "serpapi.com/search.json"]
     assert starts == [0, 10, 20]
@@ -130,13 +130,13 @@ def test_count_said_to_the_ai_and_fixed_fallback(env):
     store, pm, ctx, fake, ai, tmp = env
     ai.count = 3
     _, inbox, _ = run_node(store, pm, tmp, {"count_mode": "input", "count": 7}, text="Ein paar Quellen bitte")
-    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()) == 3
+    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()) == 3
     assert "how many results" in ai.prompts[-1]
     ai.count = None
     _, inbox, _ = run_node(store, pm, tmp, {"count_mode": "input", "count": 7}, text="Quellen bitte")
-    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()) == 7
+    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()) == 7
     _, inbox, _ = run_node(store, pm, tmp, {"count_mode": "fixed", "count": 4}, text="top 20 Quellen")
-    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()) == 4   # fixed ignores the input
+    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()) == 4   # fixed ignores the input
 
 
 def test_template_country_language_and_excluded_sites(env):
@@ -146,7 +146,7 @@ def test_template_country_language_and_excluded_sites(env):
                                             "exclude": "site1.example, www.site2.example"}, text="rag framework")
     call = fake.calls[0][2]
     assert call["q"] == "rag framework site:github.com" and call["gl"] == "us" and call["hl"] == "en"
-    urls = inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()
+    urls = inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()
     assert len(urls) == 5 and not any("site1." in u or "site2." in u for u in urls)
 
 
@@ -154,7 +154,7 @@ def test_fewer_hits_than_asked_and_none(env):
     store, pm, ctx, fake, ai, tmp = env
     fake.total = 4
     _, inbox, _ = run_node(store, pm, tmp, {"count": 30})
-    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()) == 4
+    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()) == 4
     assert len([c for c in fake.calls if c[1] == "serpapi.com/search.json"]) == 1   # no pointless pages
     fake.total = 0
     _, inbox, _ = run_node(store, pm, tmp)
@@ -179,7 +179,7 @@ def test_serper(env):
     store, pm, ctx, fake, ai, tmp = env
     ctx.settings.update({"provider": "serper"})
     _, inbox, _ = run_node(store, pm, tmp, {"count": 15})
-    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].strip().splitlines()) == 15
+    assert len(inbox["n"][0]["text"].split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()) == 15
     pages = [c[3]["page"] for c in fake.calls if c[1] == "google.serper.dev/search"]
     assert pages == [1, 2]
     ctx.settings.update({"api_key": "wrong"})
@@ -218,3 +218,13 @@ def test_the_settings_dialog(env):
         time.sleep(0.02)
     assert dlg.result.text().startswith("✔") and "250" in dlg.result.text()
     dlg.close()
+
+
+def test_100_results_fit_through_theron(env):
+    """Theron passes a hand-over on with at most 12,000 characters – every URL must arrive."""
+    store, pm, ctx, fake, ai, tmp = env
+    fake.total = 150
+    _, inbox, _ = run_node(store, pm, tmp, {"count": 100})
+    text = inbox["n"][0]["text"]
+    urls = text.split("URLS:\n")[1].split("\n\n")[0].strip().splitlines()
+    assert len(urls) == 100 and len(set(urls)) == 100 and len(text) <= 12000

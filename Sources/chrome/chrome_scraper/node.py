@@ -12,6 +12,7 @@ from .cdp import Browser, CdpError, find_browser, has_display
 from .scraper import Page, accept_language, host_of, urls_in
 
 MODES = ("headless", "window", "visible")
+HANDOVER = 11_800   # Theron passes a plugin's hand-over on with at most 12,000 characters
 
 
 class Pool:
@@ -155,9 +156,10 @@ class ScrapeNode:
                 {"key": "handover", "type": "choice", "label": "Hand on", "default": "content",
                  "options": [{"value": "content", "label": "The content (cut at the limit below)"},
                              {"value": "files", "label": "Only titles and file paths"}]},
-                {"key": "max_chars", "type": "number", "label": "Characters per page", "default": 20000,
+                {"key": "max_chars", "type": "number", "label": "Characters per page", "default": 0,
                  "show_if": {"handover": "content"},
-                 "description": "Longer pages are cut in the hand-over – the file always has everything."},
+                 "description": "0 = an equal share: Theron hands on about 12,000 characters in all, so longer pages "
+                                "are cut – the files always have everything (an agent behind can read them)."},
             ])
 
     # ------------------------------------------------------------------ run
@@ -331,13 +333,9 @@ class ScrapeNode:
                    ("\nFiles: " + ", ".join(saved) if saved else "")
             if cfg.get("handover") == "files" and saved:
                 preview = " ".join((r.get("text") or "").split())[:300]
-                parts.append(head + (f"\n{preview}…" if preview else ""))
+                parts.append((head, f"{preview}…" if preview else ""))
                 continue
-            body = r.get("markdown") if fmt in ("markdown", "both") else r.get("raw") or ""
-            if limit and len(body) > limit:
-                body = body[:limit] + "\n\n" + tr("[… cut after {n} characters – the whole page is in the file]",
-                                                  n=f"{limit:,}")
-            parts.append(f"{head}\n\n{body}")
+            parts.append((head, r.get("markdown") if fmt in ("markdown", "both") else r.get("raw") or ""))
         failed = [f"- {r['url']} – {r['error']}" for r in bad] + \
                  [f"- {u} – " + tr("over the limit of the node") for u in skipped]
         node.say(text=tr("🌐 **{ok} of {total} pages** scraped", ok=len(ok), total=len(urls))
@@ -346,10 +344,19 @@ class ScrapeNode:
         if not ok:
             return node.route("error", tr("No page could be loaded:") + "\n" + "\n".join(failed))
         kind = {"markdown": "Markdown", "html": "HTML", "both": "Markdown + HTML"}[fmt]
-        text = tr("{ok} of {total} pages scraped ({kind}):", ok=len(ok), total=len(urls), kind=kind) + \
-            "\n\n" + "\n\n---\n\n".join(parts)
-        if failed:
-            text += "\n\n" + tr("Not scraped:") + "\n" + "\n".join(failed)
+        # Theron passes at most HANDOVER characters on: the file list and what failed first, then the pages –
+        # each cut to its share (the files always have everything)
+        text = tr("{ok} of {total} pages scraped ({kind}):", ok=len(ok), total=len(urls), kind=kind)
         if files:
             text += "\n\nFILES:\n" + "\n".join(files)
-        return node.route("pages", text)
+        if failed:
+            text += "\n\n" + tr("Not scraped:") + "\n" + "\n".join(failed)
+        note = "\n\n" + tr("[… cut after {n} characters – the whole page is in the file]", n="{n}")
+        room = HANDOVER - len(text) - sum(len(h) + 12 for h, _ in parts)
+        share = max(200, room // max(len(parts), 1) - len(note))
+        cap = min(limit, share) if limit else share
+        for head, body in parts:
+            if len(body) > cap:
+                body = body[:cap].rstrip() + note.replace("{n}", f"{cap:,}")
+            text += "\n\n---\n\n" + head + (f"\n\n{body}" if body else "")
+        return node.route("pages", text[:HANDOVER])

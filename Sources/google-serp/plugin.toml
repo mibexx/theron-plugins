@@ -1,6 +1,6 @@
 id = "google-serp"
 name = "Google SERP"
-version = "1.0.0"
+version = "1.0.1"
 description = "A process node that asks Google – the query comes from the input – and hands on the URLs of the hits; how many is set in the node or read from the input. Via SerpApi or Serper with your API key."
 author = "Mike Bertram · mibexx"
 license = "MIT"

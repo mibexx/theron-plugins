@@ -166,8 +166,8 @@ def test_scrapes_the_main_content_as_markdown(env, server):
     assert "- Mäuse" in text and "  - Spatzen" in text and "| Uhu | 3 kg |" in text
     assert "Nachgeladen per JavaScript." in text   # rendered, not the raw source
     for gone in ("Kontakt", "Wir nutzen Cookies", "Versteckter Text", "Impressum", "Ähnliche Artikel"):
-        assert gone not in text.split("FILES:")[0].split("URL:")[2], gone
-    files = text.split("FILES:\n")[1].split()
+        assert gone not in text.split("URL:")[2], gone
+    files = text.split("FILES:\n")[1].split("\n\n")[0].split()
     assert len(files) == 2 and all(f.endswith(".md") and Path(f).is_file() for f in files)
     assert Path(files[0]).parent == tmp / "ws" / "scraped"
     headers = dict(Handler.seen[0][1])
@@ -187,11 +187,11 @@ def test_raw_html_rendered_and_original(env, server):
     inbox, _ = run_node(store, pm, tmp, {"format": "both", "html_source": "original", "handover": "files"},
                         text=f"{server}/article")
     text = inbox["n"][0]["text"]
-    files = text.split("FILES:\n")[1].split()
+    files = text.split("FILES:\n")[1].split("\n\n")[0].split()
     assert sorted(Path(f).suffix for f in files) == [".html", ".md"]
     raw = Path(next(f for f in files if f.endswith(".html"))).read_text()
     assert raw == ARTICLE   # exactly what the server sent
-    assert "# Eulen im Winter" not in text.split("FILES:")[0]   # only titles and paths
+    assert "# Eulen im Winter" not in text   # only titles and paths
 
 
 @chrome

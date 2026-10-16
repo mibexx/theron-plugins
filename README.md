@@ -61,6 +61,15 @@ each fixed in the node or read from the input. Content, style / CI and templates
 
 Source: [`Sources/html-presentation`](Sources/html-presentation) · Package: [`Plugins/html-presentation.theronplugin`](Plugins/html-presentation.theronplugin)
 
+### 🔎 Google Search · `google-search`
+
+The node **Google Search** searches Google with **Google's own API** – the Custom Search JSON API of Google Cloud
+(API key + search engine id) – and hands on the URLs of the hits, like Google SERP: query by the AI, as it is or a
+template, number fixed or from the input. 100 queries per day free, then $5 per 1,000. Google takes no new customers
+for this API and switches it off on 1 January 2027 – without an existing key, use Google SERP. Needs Theron 0.20.0.
+
+Source: [`Sources/google-search`](Sources/google-search) · Package: [`Plugins/google-search.theronplugin`](Plugins/google-search.theronplugin)
+
 ### 🔎 Google SERP · `google-serp`
 
 The node **Google search** asks Google and hands on the URLs of the hits – the query is written by the AI from the
