@@ -73,5 +73,19 @@
   "Many checks (“Just a moment …”) let a real browser through by themselves after a few seconds.": "Viele Prüfungen („Just a moment …“) lassen einen echten Browser nach ein paar Sekunden von selbst durch.",
   "Browser path (optional)": "Browser-Pfad (optional)",
   "Empty: Google Chrome, else Chromium, Edge or Brave – whichever is installed. The plugin uses its own profile, never yours: cookies and logins of the scraper stay there (“Open browser”).": "Leer: Google Chrome, sonst Chromium, Edge oder Brave – was installiert ist. Das Plugin nutzt ein eigenes Profil, nie deins: Cookies und Logins des Scrapers bleiben dort („Browser öffnen“).",
-  "0 = an equal share: Theron hands on about 12,000 characters in all, so longer pages are cut – the files always have everything (an agent behind can read them).": "0 = gleicher Anteil: Theron gibt insgesamt etwa 12.000 Zeichen weiter, längere Seiten werden gekürzt – die Dateien enthalten immer alles (ein Agent dahinter kann sie lesen)."
+  "0 = an equal share: Theron hands on about 12,000 characters in all, so longer pages are cut – the files always have everything (an agent behind can read them).": "0 = gleicher Anteil: Theron gibt insgesamt etwa 12.000 Zeichen weiter, längere Seiten werden gekürzt – die Dateien enthalten immer alles (ein Agent dahinter kann sie lesen).",
+  "Own Chrome (headless / window, settings of the plugin)": "Eigenes Chrome (unsichtbar / Fenster, Plugin-Einstellungen)",
+  "Claude in Chrome – your Chrome (desktop only)": "Claude in Chrome – dein Chrome (nur Desktop)",
+  "Claude in Chrome loads the pages in your own Chrome with the Claude extension – your cookies and logins, a real browser. Slower (one page after the other) and it uses your Claude usage; needs Theron 0.25+.": "Claude in Chrome lädt die Seiten in deinem eigenen Chrome mit der Claude-Erweiterung – deine Cookies und Logins, ein echter Browser. Langsamer (eine Seite nach der anderen) und es zählt zu deiner Claude-Nutzung; braucht Theron 0.25+.",
+  "Claude in Chrome …": "Claude in Chrome …",
+  "Claude in Chrome needs Theron 0.25 or newer – update Theron or choose “Own Chrome” in the node.": "Claude in Chrome braucht Theron 0.25 oder neuer – aktualisiere Theron oder wähl im Node „Eigenes Chrome“.",
+  "Claude in Chrome works on a desktop only (your Chrome with the Claude extension) – on a server, choose “Own Chrome” in the node.": "Claude in Chrome geht nur auf einem Desktop (dein Chrome mit der Claude-Erweiterung) – auf einem Server wähl im Node „Eigenes Chrome“.",
+  "this computer": "dieser Rechner",
+  "Claude in Chrome is not available – install the Claude extension in Chrome, sign in with your Claude account and keep Chrome open. ({detail})": "Claude in Chrome ist nicht erreichbar – installier die Claude-Erweiterung in Chrome, melde dich mit deinem Claude-Konto an und lass Chrome offen. ({detail})",
+  "No Chrome with the Claude extension is connected – open Chrome and sign in to the Claude extension.": "Kein Chrome mit der Claude-Erweiterung verbunden – öffne Chrome und melde dich in der Claude-Erweiterung an.",
+  "Several Chrome browsers are connected to Claude in Chrome. Which one should load the pages? (Theron remembers it.)": "Mehrere Chrome-Browser sind mit Claude in Chrome verbunden. Welcher soll die Seiten laden? (Theron merkt es sich.)",
+  "No Chrome chosen for Claude in Chrome.": "Kein Chrome für Claude in Chrome gewählt.",
+  "Claude in Chrome: {error}": "Claude in Chrome: {error}",
+  "no page text": "kein Seitentext",
+  "{url} is protected by a bot check ({name}). Please solve it in the tab in your Chrome, then answer “Done”.": "{url} ist durch einen Bot-Check geschützt ({name}). Bitte löse ihn im Tab in deinem Chrome und antworte dann „Erledigt“."
 }

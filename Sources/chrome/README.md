@@ -8,6 +8,7 @@ reads and summarises them.
 
 | Field | |
 |---|---|
+| **Browser** | **Own Chrome** (default – the plugin's own Chrome, see below) or **Claude in Chrome** (your Chrome, see below) |
 | **Format** | **Markdown** (default), **raw HTML** or **both** |
 | **Content** | **main content** (default) or the **whole page** – Markdown only |
 | **Pictures as links** | `![alt](url)` in the Markdown (off by default) |
@@ -40,6 +41,22 @@ is loaded once more in a **real window** off the screen. If that doesn't pass ei
 the plugin shows the page in a Chrome window and **asks you in the chat** to get past it – it never solves CAPTCHAs
 itself. In AUTO mode, or on a server without a screen, such pages end up in *Not scraped*.
 
+## Claude in Chrome
+
+With **Browser → Claude in Chrome** the node loads the pages in **your own Chrome** with the
+[Claude extension](https://claude.com/chrome) – your cookies, your logins, a browser you use every day. A small Claude
+Code agent (Haiku, on your Claude subscription) opens each page in a new tab, reads it (`get_page_text`, plus the HTML
+for *raw HTML*) and closes the tab; the plugin takes the page text verbatim from the tool, the model doesn't retell it.
+
+- **Desktop only** and **Theron 0.25+** – on a server or an older Theron the node goes to **Error** with a hint.
+- Chrome must be open with the Claude extension signed in. **Several connected Chrome browsers:** the node asks you
+  once which one to use and remembers it (the extension wants you to choose – the agent never picks one itself).
+- One page after the other, so slower than the own Chrome – and the page text counts towards your Claude usage.
+- The agent never clicks, types, logs in or solves a CAPTCHA. A bot check stays open in a tab of your Chrome and the
+  node **asks you in the chat** to get past it (*Still blocked: let me solve it*); then it reads the tab.
+- *Content*, *Pictures as links* and *HTML as the server sent it* apply to the own Chrome only – Claude in Chrome
+  hands on the page text as Chrome's extension reads it.
+
 ## Settings
 
 | Setting | |
@@ -61,4 +78,4 @@ Without a screen Chrome always runs invisibly. The Theron headless Docker image 
 0.23.0); elsewhere install `chromium` or `google-chrome-stable`. In a container the plugin adds `--no-sandbox` by
 itself.
 
-Needs Theron 0.20.0. Permissions: network (the pages), files (the files in the project's folder).
+Needs Theron 0.20.0 (Claude in Chrome: 0.25.0). Permissions: network (the pages), files (the files in the project's folder).

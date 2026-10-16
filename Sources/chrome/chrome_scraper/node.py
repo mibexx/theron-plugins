@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from .cdp import Browser, CdpError, find_browser, has_display
+from .claude_chrome import ClaudeChrome, unavailable
 from .scraper import Page, accept_language, host_of, urls_in
 
 MODES = ("headless", "window", "visible")
@@ -132,18 +133,24 @@ class ScrapeNode:
             outputs=[{"id": "pages", "label": tr("Pages"), "color": "success"},
                      {"id": "error", "label": tr("Error"), "color": "error"}],
             fields=[
+                {"key": "browser", "type": "choice", "label": "Browser", "default": "own",
+                 "options": [{"value": "own", "label": "Own Chrome (headless / window, settings of the plugin)"},
+                             {"value": "claude", "label": "Claude in Chrome – your Chrome (desktop only)"}],
+                 "description": "Claude in Chrome loads the pages in your own Chrome with the Claude extension – your "
+                                "cookies and logins, a real browser. Slower (one page after the other) and it uses "
+                                "your Claude usage; needs Theron 0.25+."},
                 {"key": "format", "type": "choice", "label": "Format", "default": "markdown",
                  "options": [{"value": "markdown", "label": "Markdown – the clean content"},
                              {"value": "html", "label": "Raw HTML"},
                              {"value": "both", "label": "Both"}]},
                 {"key": "content", "type": "choice", "label": "Content", "default": "main",
-                 "show_if": {"format": ["markdown", "both"]},
+                 "show_if": {"format": ["markdown", "both"], "browser": ["own", None, ""]},
                  "options": [{"value": "main", "label": "Main content – without menus, footer, cookie banners"},
                              {"value": "full", "label": "Whole page"}]},
                 {"key": "images", "type": "bool", "label": "Pictures as links", "default": False,
-                 "show_if": {"format": ["markdown", "both"]}},
+                 "show_if": {"format": ["markdown", "both"], "browser": ["own", None, ""]}},
                 {"key": "html_source", "type": "choice", "label": "HTML", "default": "rendered",
-                 "show_if": {"format": ["html", "both"]},
+                 "show_if": {"format": ["html", "both"], "browser": ["own", None, ""]},
                  "options": [{"value": "rendered", "label": "As rendered (after JavaScript)"},
                              {"value": "original", "label": "As the server sent it"}]},
                 {"key": "urls", "type": "textarea", "label": "URLs (optional)",
@@ -173,6 +180,8 @@ class ScrapeNode:
         if not urls:
             return node.route("error", tr("No URLs in the input – put Google SERP before this node or list them in "
                                           "the node."))
+        if cfg.get("browser") == "claude":
+            return await self.run_claude(node, urls, skipped)
         s = self.ctx.settings
         mode = s.get("mode") or "headless"
         parallel = max(1, min(int(s.get("parallel") or 3), 8))
@@ -216,6 +225,17 @@ class ScrapeNode:
             for url in blocked:
                 results[url] = await self.by_hand(node, url, cfg, results[url])
 
+        return self.hand_on(node, urls, results, skipped)
+
+    async def run_claude(self, node, urls: list[str], skipped: list[str]):
+        tr = self.ctx.tr
+        why = unavailable(self.ctx)
+        if why:
+            return node.route("error", why)
+        node.progress(tr("Claude in Chrome …"))
+        results = await ClaudeChrome(self.ctx).run(
+            node, urls, node.config,
+            lambda n: node.progress(tr("🌐 {n} of {total} pages", n=n, total=len(urls)) + " · Claude in Chrome"))
         return self.hand_on(node, urls, results, skipped)
 
     async def scrape(self, browser, url: str, cfg: dict) -> dict:

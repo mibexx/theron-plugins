@@ -79,6 +79,16 @@ never solves CAPTCHAs. Works headless on a server. Needs Theron 0.20.0.
 
 Source: [`Sources/chrome`](Sources/chrome) · Package: [`Plugins/chrome.theronplugin`](Plugins/chrome.theronplugin)
 
+### 🛰 Bright Data Scraper · `brightdata`
+
+The node **Scrape pages (Bright Data)** loads the URLs it gets (e.g. the hits of Google Search) through Bright Data's
+Web Unlocker – past bot protection, CAPTCHAs and geo blocks, no browser needed, also on a server – and hands on their
+content as Markdown or raw HTML, files in the project's folder. Same contract as the Chrome Scraper's node. Your API
+key and Web Unlocker zone in the settings (with **Test** and the cost: ≈ $1.50 per 1,000 pages pay as you go, 5,000
+free per month). Needs Theron 0.20.0.
+
+Source: [`Sources/brightdata`](Sources/brightdata) · Package: [`Plugins/brightdata.theronplugin`](Plugins/brightdata.theronplugin)
+
 ### ▦ Trello Sync · `trello-sync`
 
 Syncs a Theron task list with a Trello board – needs Theron 0.16.0.
