@@ -1,0 +1,66 @@
+id = "chrome"
+name = "Chrome Scraper"
+version = "1.0.0"
+description = "A process node that opens web pages in your own Chrome – behaving like a person, so bot protection sees a normal visitor – and hands on their content as clean Markdown or raw HTML. Works with the URLs of Google SERP; headless on a server, too."
+author = "Mike Bertram · mibexx"
+license = "MIT"
+theron_api = 1
+min_theron = "0.20.0"
+entry = "chrome_scraper"
+permissions = ["network", "files"]
+
+[[settings]]
+key = "mode"
+type = "choice"
+label = "Browser"
+default = "headless"
+options = [{ value = "headless", label = "Invisible (headless)" }, { value = "window", label = "Real window, off the screen" }, { value = "visible", label = "Visible window" }]
+description = "Invisible is enough for most sites. A real window is the most natural for strict bot protection (Chrome shows up in the Dock / taskbar while it works). On a server without a screen it is always invisible."
+
+[[settings]]
+key = "retry_window"
+type = "bool"
+label = "Blocked: try again in a real window"
+default = true
+description = "When a site's bot check doesn't let the invisible browser through, the page is loaded once more in a real (off-screen) window."
+
+[[settings]]
+key = "ask_user"
+type = "bool"
+label = "Still blocked: let me solve it"
+default = true
+description = "Shows the page in a Chrome window and asks you in the chat to get past the check (e.g. a CAPTCHA) – the plugin never solves them itself. In AUTO mode the page is skipped."
+
+[[settings]]
+key = "language"
+type = "text"
+label = "Languages"
+default = "de-DE, de, en"
+description = "What the browser says it reads (Accept-Language), like a normal browser – the first one is the browser's language."
+
+[[settings]]
+key = "pause"
+type = "number"
+label = "Pause per site (seconds)"
+default = 2
+description = "Between two pages of the same site, varied a little – one page per site at a time, like a person reading."
+
+[[settings]]
+key = "parallel"
+type = "number"
+label = "Pages at once"
+default = 3
+description = "Tabs open at the same time (different sites only), 1–8."
+
+[[settings]]
+key = "challenge_wait"
+type = "number"
+label = "Wait for bot checks (seconds)"
+default = 20
+description = "Many checks (“Just a moment …”) let a real browser through by themselves after a few seconds."
+
+[[settings]]
+key = "browser"
+type = "text"
+label = "Browser path (optional)"
+description = "Empty: Google Chrome, else Chromium, Edge or Brave – whichever is installed. The plugin uses its own profile, never yours: cookies and logins of the scraper stay there (“Open browser”)."

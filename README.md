@@ -70,6 +70,16 @@ Needs Theron 0.20.0.
 
 Source: [`Sources/google-serp`](Sources/google-serp) · Package: [`Plugins/google-serp.theronplugin`](Plugins/google-serp.theronplugin)
 
+### 🌐 Chrome Scraper · `chrome`
+
+The node **Scrape pages** loads the URLs it gets (e.g. the hits of Google SERP) in your own Chrome and hands on their
+content as clean Markdown (main content, without menus and cookie banners) or raw HTML – files in the project's folder.
+It behaves like a person (no automation switches, a normal user agent even invisible, its own profile with cookies,
+mouse and scrolling, pauses per site); a site that stays blocked is tried in a real window and then shown to you – it
+never solves CAPTCHAs. Works headless on a server. Needs Theron 0.20.0.
+
+Source: [`Sources/chrome`](Sources/chrome) · Package: [`Plugins/chrome.theronplugin`](Plugins/chrome.theronplugin)
+
 ### ▦ Trello Sync · `trello-sync`
 
 Syncs a Theron task list with a Trello board – needs Theron 0.16.0.
