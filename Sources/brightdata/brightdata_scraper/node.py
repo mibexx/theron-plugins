@@ -1,4 +1,5 @@
-"""The process node 🛰 Scrape pages (Bright Data) – same contract as the Chrome Scraper's node: URLs in, pages out."""
+"""The process node 🛰 Scrape pages (Bright Data Web Unlocker) – same contract as the Chrome Scraper's node: URLs in,
+pages out. ``hand_on`` is shared with the Browser API node."""
 
 from __future__ import annotations
 
@@ -65,11 +66,11 @@ class ScrapeNode:
     def register(self) -> None:
         tr = self.ctx.tr
         self.ctx.nodes.register(
-            "scrape", label="Scrape pages (Bright Data)", icon="🛰", run=self.run,
+            "scrape", label="Web Unlocker (Bright Data)", icon="🛰", run=self.run,
             description="Loads the URLs it gets (e.g. from Google Search) through Bright Data's Web Unlocker – past "
                         "bot protection and CAPTCHAs – and hands on their content as Markdown or raw HTML; files in "
                         "the project's folder.",
-            ai_hint="Scrape web pages via Bright Data (paid per page, gets past bot protection): loads the URLs of the "
+            ai_hint="Scrape web pages via Bright Data Web Unlocker (paid per page, gets past bot protection; no JavaScript clicks): loads the URLs of the "
                     "incoming text (the URLS: block, else every link; or the node's list) and hands on the page "
                     "content as Markdown or raw HTML. Outputs: pages, error (nothing could be loaded).",
             outputs=[{"id": "pages", "label": tr("Pages"), "color": "success"},
@@ -159,10 +160,12 @@ class ScrapeNode:
         target.mkdir(parents=True, exist_ok=True)
         return target
 
-    def hand_on(self, node, urls: list[str], results: dict[str, dict], skipped: list[str]):
+    def hand_on(self, node, urls: list[str], results: dict[str, dict], skipped: list[str], *,
+                markdown: bool | None = None, kind: str = "", via: str = "Bright Data", icon: str = "🛰"):
         tr = self.ctx.tr
         cfg = node.config
-        markdown = (cfg.get("format") or "markdown") == "markdown"
+        if markdown is None:
+            markdown = (cfg.get("format") or "markdown") == "markdown"
         ok = [results[u] for u in urls if not results[u].get("error")]
         bad = [results[u] for u in urls if results[u].get("error")]
         folder = self.folder(node)
@@ -191,12 +194,13 @@ class ScrapeNode:
             parts.append((head, r["markdown"] if markdown else r["raw"]))
         failed = [f"- {r['url']} – {r['error']}" for r in bad] + \
                  [f"- {u} – " + tr("over the limit of the node") for u in skipped]
-        node.say(text=tr("🛰 **{ok} of {total} pages** loaded through Bright Data", ok=len(ok), total=len(urls))
+        node.say(text=tr("{icon} **{ok} of {total} pages** loaded through {via}", icon=icon, ok=len(ok),
+                         total=len(urls), via=via)
                  + ("\n\n" + "\n".join(chat) if chat else "")
                  + ("\n\n" + tr("Not loaded:") + "\n" + "\n".join(failed) if failed else ""))
         if not ok:
             return node.route("error", tr("No page could be loaded:") + "\n" + "\n".join(failed))
-        kind = "Markdown" if markdown else "HTML"
+        kind = kind or ("Markdown" if markdown else "HTML")
         # Theron passes at most HANDOVER characters on: the file list and what failed first, then the pages –
         # each cut to its share (the files always have everything)
         text = tr("{ok} of {total} pages loaded ({kind}):", ok=len(ok), total=len(urls), kind=kind)

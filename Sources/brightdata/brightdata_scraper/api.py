@@ -1,14 +1,20 @@
-"""The Web Unlocker call – POST https://api.brightdata.com/request through ``ctx.http``.
+"""The Bright Data REST calls – POST https://api.brightdata.com/request through ``ctx.http``.
 
-``format: json`` wraps the target's answer as {"status_code", "headers", "body"}; ``data_format: markdown`` lets
-Bright Data turn the HTML into Markdown. Only successful pages are billed."""
+Web Unlocker: ``format: json`` wraps the target's answer as {"status_code", "headers", "body"}; ``data_format:
+markdown`` lets Bright Data turn the HTML into Markdown. SERP API: the same endpoint with a SERP zone and a Google URL –
+``brd_json=1`` makes it answer with the parsed results ({"organic": [{"link", "title", "description", "rank"}]}).
+Only successful requests are billed."""
 
 from __future__ import annotations
 
 import json as _json
+from urllib.parse import urlencode, urlparse
 
 ENDPOINT = "https://api.brightdata.com/request"
 COST = "≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan; 5,000 free per month"
+SERP_COST = "≈ $1.50 per 1,000 searches pay as you go, ≈ $1.30 on the Scale plan"
+PAGE = 10           # Google: 10 results per page – every page is one billed search
+MAX_RESULTS = 100
 
 
 class UnlockError(RuntimeError):
@@ -43,31 +49,69 @@ def error_for(status: int, msg: str) -> UnlockError:
     return UnlockError("other", f"HTTP {status}: {msg}".strip(), status)
 
 
+def google_url(query: str, page: int = 0, *, country: str = "", language: str = "") -> str:
+    params = {"q": query}
+    if country:
+        params["gl"] = country.lower()
+    if language:
+        params["hl"] = language.lower()
+    if page:
+        params["start"] = page * PAGE
+    params["brd_json"] = 1
+    return "https://www.google.com/search?" + urlencode(params)
+
+
+def organic(data) -> list[dict]:
+    """The organic hits of a parsed SERP answer: [{"title", "url", "snippet"}] (also when it comes wrapped as
+    {"body": "<json>"} or in the newer {"results": [{"url", "title"}]} shape)."""
+    if isinstance(data, dict) and isinstance(data.get("body"), str):
+        try:
+            data = _json.loads(data["body"])
+        except ValueError:
+            return []
+    if not isinstance(data, dict):
+        return []
+    items = data.get("organic") or data.get("results") or []
+    out = []
+    for i in items if isinstance(items, list) else []:
+        if not isinstance(i, dict) or i.get("type") not in (None, "organic"):
+            continue
+        url = str(i.get("link") or i.get("url") or "")
+        if urlparse(url).scheme in ("http", "https"):
+            out.append({"title": str(i.get("title") or ""), "url": url,
+                        "snippet": str(i.get("description") or i.get("snippet") or "")})
+    return out
+
+
 class Client:
-    def __init__(self, http, key: str, zone: str, *, timeout: float = 120):
+    def __init__(self, http, key: str, zone: str, *, timeout: float = 120, what: str = "Web Unlocker zone"):
         if not (key or "").strip():
             raise UnlockError("no_key", "No Bright Data API key – add it in Settings → Plugins → Bright Data Scraper.")
         if not (zone or "").strip():
-            raise UnlockError("no_zone", "No Web Unlocker zone – add it in Settings → Plugins → Bright Data Scraper.")
+            raise UnlockError("no_zone", f"No {what} – add it in Settings → Plugins → Bright Data Scraper.")
         self.http, self.key, self.zone, self.timeout = http, key.strip(), zone.strip(), timeout
 
-    async def unlock(self, url: str, *, markdown: bool = True, country: str = "", render: bool = False) -> dict:
-        """{"url", "status" (the target's), "body", "headers"}; raises UnlockError when Bright Data itself refuses."""
-        body = {"zone": self.zone, "url": url, "format": "json"}
-        if markdown:
-            body["data_format"] = "markdown"
-        if country:
-            body["country"] = country.lower()
-        if render:
-            body["render"] = "true"
+    async def _post(self, body: dict):
         try:
-            resp = await self.http.request("POST", ENDPOINT, json=body, timeout=self.timeout,
+            resp = await self.http.request("POST", ENDPOINT, json={"zone": self.zone, **body}, timeout=self.timeout,
                                            headers={"Authorization": f"Bearer {self.key}",
                                                     "Content-Type": "application/json"})
         except (OSError, TimeoutError) as exc:
             raise UnlockError("network", f"Bright Data can't be reached: {exc or exc.__class__.__name__}") from exc
         if not resp.ok:
             raise error_for(resp.status, _message(resp))
+        return resp
+
+    async def unlock(self, url: str, *, markdown: bool = True, country: str = "", render: bool = False) -> dict:
+        """{"url", "status" (the target's), "body", "headers"}; raises UnlockError when Bright Data itself refuses."""
+        body = {"url": url, "format": "json"}
+        if markdown:
+            body["data_format"] = "markdown"
+        if country:
+            body["country"] = country.lower()
+        if render:
+            body["render"] = "true"
+        resp = await self._post(body)
         try:
             data = resp.json()
         except ValueError:
@@ -79,3 +123,39 @@ class Client:
             page = _json.dumps(page, ensure_ascii=False)
         return {"url": url, "status": int(data.get("status_code") or 200), "body": page,
                 "headers": data.get("headers") if isinstance(data.get("headers"), dict) else {}}
+
+    async def serp_page(self, query: str, page: int = 0, *, country: str = "", language: str = "") -> list[dict]:
+        """One Google result page through the SERP zone (``page`` = 0, 1, …)."""
+        body = {"url": google_url(query, page, country=country, language=language), "format": "json"}
+        if country:
+            body["country"] = country.lower()
+        resp = await self._post(body)
+        try:
+            return organic(resp.json())
+        except ValueError:
+            raise UnlockError("other", "The SERP zone didn't answer with parsed results – is it a SERP API zone?")
+
+    async def search(self, query: str, count: int, *, country: str = "", language: str = "",
+                     exclude: list[str] | None = None) -> tuple[list[dict], int]:
+        """Up to ``count`` distinct results and how many searches (pages) it took."""
+        count = max(1, min(int(count), MAX_RESULTS))
+        out, seen, pages = [], set(), 0
+        while len(out) < count and pages < MAX_RESULTS // PAGE + 2:
+            got = await self.serp_page(query, pages, country=country, language=language)
+            pages += 1
+            fresh = 0
+            for r in got:
+                key = r["url"].rstrip("/")
+                if key in seen or excluded(r["url"], exclude or []):
+                    continue
+                seen.add(key)
+                fresh += 1
+                out.append(r)
+            if len(got) < PAGE // 2 or not fresh:   # Google has no more
+                break
+        return out[:count], pages
+
+
+def excluded(url: str, sites: list[str]) -> bool:
+    host = urlparse(url).netloc.lower().removeprefix("www.")
+    return any(host == s or host.endswith("." + s) for s in sites)

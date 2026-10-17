@@ -1,40 +1,64 @@
 id = "brightdata"
 name = "Bright Data Scraper"
-version = "1.0.0"
-description = "A process node that loads web pages through Bright Data's Web Unlocker – their proxy network gets past bot protection, CAPTCHAs and geo blocks – and hands on the content as Markdown or raw HTML. Works with the URLs of Google Search / Google SERP; no browser needed, also on a server."
+version = "1.1.0"
+description = "Three process nodes for Bright Data: Google search through the SERP API (the URLs of the hits), Web Unlocker (pages past bot protection, CAPTCHAs and geo blocks as Markdown or raw HTML) and Browser API (pages in a real Chrome at Bright Data – JavaScript runs, CAPTCHAs are solved). No browser on your machine, also on a server."
 author = "Mike Bertram · mibexx"
 license = "MIT"
 theron_api = 1
 min_theron = "0.20.0"
 entry = "brightdata_scraper"
-permissions = ["network", "files"]
+permissions = ["network", "files", "ai"]
 
 [[settings]]
 key = "api_key"
 type = "secret"
 label = "Bright Data API key"
-description = "brightdata.com → Account settings → API keys. Approximate cost per 1,000 pages (Web Unlocker, October 2026): ≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan ($499/month); 5,000 free per month. Only successful pages are billed."
-required = true
+description = "brightdata.com → Account settings → API keys – for the SERP API and the Web Unlocker (the Browser API uses its own username and password below). 5,000 free credits per month across the products; only successful requests are billed."
+
+[[settings]]
+key = "serp_zone"
+type = "text"
+label = "SERP API zone"
+default = "serp_api1"
+description = "The name of your SERP API zone (control panel → Proxies & Scraping → SERP API) – for the node Google search. Approximate cost per 1,000 searches (October 2026): ≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan; one search = up to 10 results."
 
 [[settings]]
 key = "zone"
 type = "text"
 label = "Web Unlocker zone"
 default = "web_unlocker1"
-description = "The name of your Web Unlocker zone (control panel → Proxies & Scraping → Web Unlocker)."
-required = true
+description = "The name of your Web Unlocker zone (control panel → Proxies & Scraping → Web Unlocker) – for the node Web Unlocker. Approximate cost per 1,000 pages (October 2026): ≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan ($499/month)."
+
+[[settings]]
+key = "browser_user"
+type = "text"
+label = "Browser API username"
+description = "From the Overview tab of your Browser API zone (brd-customer-…-zone-…) – for the node Browser API. Billed by traffic (October 2026): ≈ $8 per GB pay as you go, ≈ $7 per GB on the Scale plan; 1 GB free per month. A shop page without images is about 1–3 MB."
+
+[[settings]]
+key = "browser_password"
+type = "secret"
+label = "Browser API password"
+description = "From the same Overview tab."
 
 [[settings]]
 key = "country"
 type = "text"
 label = "Country"
 default = "de"
-description = "Two letters like de, at, us – the pages are loaded from that country (prices, language, geo blocks). Empty: Bright Data decides. A node can set its own."
+description = "Two letters like de, at, us – searches and pages come from that country (prices, language, geo blocks). Empty: Bright Data decides. A node can set its own."
+
+[[settings]]
+key = "language"
+type = "text"
+label = "Search language"
+default = "de"
+description = "Two letters like de or en – the language of Google's results. Empty: Google decides. A node can set its own."
 
 [[settings]]
 key = "render"
 type = "bool"
-label = "Run JavaScript"
+label = "Web Unlocker: run JavaScript"
 default = false
 description = "Loads the page in a browser at Bright Data first – for shops that only show prices after JavaScript. Slower; off is enough for most pages."
 
@@ -43,7 +67,7 @@ key = "parallel"
 type = "number"
 label = "Pages at once"
 default = 5
-description = "Requests at the same time, 1–20."
+description = "Requests or browser sessions at the same time, 1–20."
 
 [[settings]]
 key = "timeout"
