@@ -229,6 +229,34 @@ def test_serp_search_hands_on_the_urls_block(env):
     assert [c[2]["url"] for c in fake.calls] == urls[:3]
 
 
+def test_googles_goto_links_are_resolved(env, monkeypatch):
+    import http.server
+    import threading
+    mod = sys.modules[env[1].plugins["brightdata"].manifest.module_name + ".api"]
+
+    class Google(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(302 if "known" in self.path else 404)
+            self.send_header("Location", "https://www.esta-poolshop.de/pahlen-3kw")
+            self.end_headers()
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Google)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    real = mod.location
+    local = f"http://127.0.0.1:{srv.server_address[1]}"
+    monkeypatch.setattr(mod, "location", lambda url, timeout=10: real(url.replace("https://www.google.com", local)))
+    try:
+        hits = [{"url": "https://www.google.com/goto?url=known"}, {"url": "https://www.google.com/goto?url=x"},
+                {"url": "https://shop.example/a"}]
+        out = asyncio.run(mod.resolve_redirects(hits))
+        assert [h["url"] for h in out] == ["https://www.esta-poolshop.de/pahlen-3kw",
+                                           "https://www.google.com/goto?url=x", "https://shop.example/a"]
+    finally:
+        srv.shutdown()
+
+
 def test_serp_template_exclude_and_errors(env):
     store, pm, ctx, fake, tmp = env
     routes = {"urls": "n", "empty": "e", "error": "x"}

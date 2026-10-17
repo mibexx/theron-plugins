@@ -64,6 +64,46 @@ def google_url(query: str, page: int = 0, *, country: str = "", language: str = 
     return "https://www.google.com/search?" + urlencode(params)
 
 
+def is_goto(url: str) -> bool:
+    u = urlparse(url)
+    return u.netloc.endswith("google.com") and u.path == "/goto"
+
+
+def location(url: str, timeout: float = 10) -> str:
+    """Where ``url`` redirects to – asked without following it (the target isn't loaded); "" if it doesn't."""
+    import urllib.error
+    import urllib.request
+
+    class Stay(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **kw):
+            return None
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Theron)"})
+    try:
+        with urllib.request.build_opener(Stay).open(req, timeout=timeout):
+            return ""
+    except urllib.error.HTTPError as exc:
+        target = exc.headers.get("Location", "") if exc.code in (301, 302, 303, 307, 308) else ""
+        return target if urlparse(target).scheme in ("http", "https") else ""
+    except (OSError, ValueError):
+        return ""
+
+
+def redirect_target(url: str) -> str:
+    """Google's encrypted ``/goto?url=…`` link → the shop page its 302 points to. Free (Google, not Bright Data).
+    Anything else, or no answer: the link as it is."""
+    return (location(url) or url) if is_goto(url) else url
+
+
+async def resolve_redirects(hits: list[dict]) -> list[dict]:
+    """The hits with Google's /goto links replaced by the pages they lead to (all at once)."""
+    todo = [h for h in hits if "google.com/goto" in h["url"]]
+    if todo:
+        targets = await asyncio.gather(*(asyncio.to_thread(redirect_target, h["url"]) for h in todo))
+        for h, t in zip(todo, targets):
+            h["url"] = t
+    return hits
+
+
 class NotParsed(ValueError):
     """The answer has no parsed Google page (empty, Markdown, HTML …)."""
 
@@ -157,7 +197,7 @@ class Client:
         for attempt in range(max(1, tries)):
             resp = await self._post(body)
             try:
-                return organic(resp.json())
+                return await resolve_redirects(organic(resp.json()))
             except (NotParsed, ValueError):
                 if attempt + 1 < max(1, tries):
                     await asyncio.sleep(RETRY_DELAY * (attempt + 1))

@@ -8,7 +8,7 @@ import html as _html
 import re
 from pathlib import Path
 
-from .api import Client, UnlockError
+from .api import Client, UnlockError, redirect_target
 
 HANDOVER = 11_800   # Theron passes a plugin's hand-over on with at most 12,000 characters
 URL = re.compile(r"https?://[^\s<>\"'`)\]]+", re.I)
@@ -103,6 +103,7 @@ class ScrapeNode:
         cfg = node.config
         s = self.ctx.settings
         urls = urls_in(cfg.get("urls") or "") or urls_in(node.input or "") or urls_in(node.task or "")
+        urls = list(dict.fromkeys(await asyncio.gather(*(asyncio.to_thread(redirect_target, u) for u in urls))))   # Google's /goto links → the pages
         limit = int(cfg.get("max_pages") or 0)
         skipped = urls[limit:] if limit > 0 else []
         urls = urls[:limit] if limit > 0 else urls

@@ -13,6 +13,7 @@ import base64
 import itertools
 import json
 
+from .api import redirect_target
 from .node import ScrapeNode, urls_in
 
 ENDPOINT = "wss://brd.superproxy.io:9222"
@@ -216,6 +217,7 @@ class BrowserNode:
         cfg = node.config
         s = self.ctx.settings
         urls = urls_in(cfg.get("urls") or "") or urls_in(node.input or "") or urls_in(node.task or "")
+        urls = list(dict.fromkeys(await asyncio.gather(*(asyncio.to_thread(redirect_target, u) for u in urls))))   # Google's /goto links → the pages
         limit = int(cfg.get("max_pages") or 0)
         skipped = urls[limit:] if limit > 0 else []
         urls = urls[:limit] if limit > 0 else urls

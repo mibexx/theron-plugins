@@ -1,6 +1,6 @@
 id = "brightdata"
 name = "Bright Data Scraper"
-version = "1.1.2"
+version = "1.1.3"
 description = "Three process nodes for Bright Data: Google search through the SERP API (the URLs of the hits), Web Unlocker (pages past bot protection, CAPTCHAs and geo blocks as Markdown or raw HTML) and Browser API (pages in a real Chrome at Bright Data – JavaScript runs, CAPTCHAs are solved). No browser on your machine, also on a server."
 author = "Mike Bertram · mibexx"
 license = "MIT"
