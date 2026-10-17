@@ -21,6 +21,7 @@ from theron.store import Store  # noqa: E402
 class FakeUnlocker:
     def __init__(self):
         self.key, self.zone, self.serp_zone = "good", "web_unlocker1", "serp_api1"
+        self.serp_empty = False
         self.calls = []
         self.pages = {}       # url → (status, body)
         self.refuse = {}      # url → (status, error) from Bright Data itself
@@ -40,10 +41,17 @@ class FakeUnlocker:
         target = json["url"]
         if json["zone"] == self.serp_zone:
             q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
+            if json.get("data_format") != "parsed" or "brd_json" in q or self.serp_empty:   # the real zone: empty body
+                return answer(200, {"status_code": 200, "headers": {}, "body": ""})
             start = int(q.get("start", ["0"])[0])
             found = [{"link": f"https://site{i + 1}.example/{q['q'][0].split()[0]}", "title": f"{q['q'][0]} #{i + 1}",
                       "description": f"about {q['q'][0]}", "rank": i + 1} for i in range(start, min(start + 10, 35))]
-            return answer(200, {"general": {"search_engine": "google"}, "organic": found})
+            if start == 0:   # Google's own redirect now and then
+                found[1]["link"] = "https://www.google.com/url?q=" + urllib.parse.quote(found[1]["link"], safe="")
+            page = {"general": {"search_engine": "google", "query": q["q"][0]}, "organic": found}
+            if q["q"][0] == "leer":
+                page = {"general": {"search_engine": "google", "query": "leer"}}   # a page without hits
+            return answer(200, {"status_code": 200, "headers": {}, "body": __import__("json").dumps(page)})
         if target in self.refuse:
             status, why = self.refuse[target]
             return answer(status, "", {"x-brd-error": why})
@@ -202,10 +210,11 @@ def test_serp_search_hands_on_the_urls_block(env):
     urls = serp_urls(text)
     assert len(urls) == 25 and urls[0] == "https://site1.example/lego" and ai.prompts
     sent = [c[2] for c in fake.calls]
-    assert all(b["zone"] == "serp_api1" and b["format"] == "json" for b in sent) and len(sent) == 3   # 3 pages
+    assert all(b["zone"] == "serp_api1" and b["format"] == "json" and b["data_format"] == "parsed" for b in sent)
+    assert len(sent) == 3 and urls[1] == "https://site2.example/lego"                 # 3 pages; Google's redirect resolved
     q = urllib.parse.parse_qs(urllib.parse.urlparse(sent[1]["url"]).query)
     assert q["q"] == ["lego 42115 preis"] and q["gl"] == ["de"] and q["hl"] == ["de"] and q["start"] == ["10"]
-    assert q["brd_json"] == ["1"]
+    assert "brd_json" not in q
     said = [e for e in store.events(ctrl.run_id) if e["type"] == "plugin_message"]
     assert "25 results (3 searches through Bright Data)" in said[0]["text"]
     # the Web Unlocker reads exactly that block
@@ -223,6 +232,12 @@ def test_serp_template_exclude_and_errors(env):
     urls = serp_urls(inbox["n"][0]["text"])
     assert len(urls) == 5 and not any("site2." in u for u in urls)
     assert "Lego 42115 site:geizhals.de" in urllib.parse.unquote_plus(fake.calls[0][2]["url"])
+    inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="leer", kind="search", routes=routes)
+    assert "Google found nothing" in inbox["e"][0]["text"]                     # really no hits: “No results”
+    fake.serp_empty = True                                                     # a zone that answers with nothing
+    inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="Pahlen", kind="search", routes=routes)
+    assert any("didn't answer with parsed Google results" in e["text"] for e in inbox["x"])   # an error, not “nothing found”
+    fake.serp_empty = False
     ctx.settings.update({"serp_zone": ""})
     inbox, _ = run_node(store, pm, tmp, text="x", kind="search", routes=routes)
     assert "No SERP API zone" in inbox["x"][0]["text"]

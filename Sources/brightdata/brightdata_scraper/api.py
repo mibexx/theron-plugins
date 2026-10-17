@@ -2,7 +2,9 @@
 
 Web Unlocker: ``format: json`` wraps the target's answer as {"status_code", "headers", "body"}; ``data_format:
 markdown`` lets Bright Data turn the HTML into Markdown. SERP API: the same endpoint with a SERP zone and a Google URL –
-``brd_json=1`` makes it answer with the parsed results ({"organic": [{"link", "title", "description", "rank"}]}).
+``data_format: parsed`` makes it answer with the parsed results ({"general", "organic": [{"link", "title",
+"description", "rank"}]}) whatever the zone's default response format is (Markdown there gave empty results;
+``brd_json=1`` in the URL gave an empty body with the zone on JSON).
 Only successful requests are billed."""
 
 from __future__ import annotations
@@ -57,26 +59,44 @@ def google_url(query: str, page: int = 0, *, country: str = "", language: str = 
         params["hl"] = language.lower()
     if page:
         params["start"] = page * PAGE
-    params["brd_json"] = 1
     return "https://www.google.com/search?" + urlencode(params)
+
+
+class NotParsed(ValueError):
+    """The answer has no parsed Google page (empty, Markdown, HTML …)."""
+
+
+def real_link(url: str) -> str:
+    """Google's own redirect (/url?q=…) → the page it leads to; anything else as it is."""
+    from urllib.parse import parse_qs
+    u = urlparse(url)
+    if u.netloc.endswith("google.com") and u.path == "/url":
+        target = (parse_qs(u.query).get("q") or parse_qs(u.query).get("url") or [""])[0]
+        if urlparse(target).scheme in ("http", "https"):
+            return target
+    return url
 
 
 def organic(data) -> list[dict]:
     """The organic hits of a parsed SERP answer: [{"title", "url", "snippet"}] (also when it comes wrapped as
-    {"body": "<json>"} or in the newer {"results": [{"url", "title"}]} shape)."""
-    if isinstance(data, dict) and isinstance(data.get("body"), str):
-        try:
-            data = _json.loads(data["body"])
-        except ValueError:
-            return []
-    if not isinstance(data, dict):
-        return []
+    {"status_code", "body": "<json>"} or in the newer {"results": [{"url", "title"}]} shape). Raises NotParsed when
+    there is no parsed Google page at all – not the same as a page without hits."""
+    if isinstance(data, dict) and "body" in data and "general" not in data:
+        body = data.get("body")
+        if isinstance(body, str):
+            try:
+                body = _json.loads(body) if body.strip() else None
+            except ValueError:
+                raise NotParsed(body.strip()[:80]) from None
+        data = body
+    if not isinstance(data, dict) or not any(k in data for k in ("general", "organic", "results")):
+        raise NotParsed(str(data)[:80] if data else "empty")
     items = data.get("organic") or data.get("results") or []
     out = []
     for i in items if isinstance(items, list) else []:
         if not isinstance(i, dict) or i.get("type") not in (None, "organic"):
             continue
-        url = str(i.get("link") or i.get("url") or "")
+        url = real_link(str(i.get("link") or i.get("url") or ""))
         if urlparse(url).scheme in ("http", "https"):
             out.append({"title": str(i.get("title") or ""), "url": url,
                         "snippet": str(i.get("description") or i.get("snippet") or "")})
@@ -126,14 +146,18 @@ class Client:
 
     async def serp_page(self, query: str, page: int = 0, *, country: str = "", language: str = "") -> list[dict]:
         """One Google result page through the SERP zone (``page`` = 0, 1, …)."""
-        body = {"url": google_url(query, page, country=country, language=language), "format": "json"}
+        body = {"url": google_url(query, page, country=country, language=language), "format": "json",
+                "data_format": "parsed"}
         if country:
             body["country"] = country.lower()
         resp = await self._post(body)
         try:
             return organic(resp.json())
+        except NotParsed:
+            raise UnlockError("other", "The SERP zone didn't answer with parsed Google results – is it a SERP API "
+                                       "zone? (Its default response format doesn't matter.)") from None
         except ValueError:
-            raise UnlockError("other", "The SERP zone didn't answer with parsed results – is it a SERP API zone?")
+            raise UnlockError("other", "The SERP zone didn't answer with JSON – is it a SERP API zone?") from None
 
     async def search(self, query: str, count: int, *, country: str = "", language: str = "",
                      exclude: list[str] | None = None) -> tuple[list[dict], int]:
