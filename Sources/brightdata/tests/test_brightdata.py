@@ -22,6 +22,8 @@ class FakeUnlocker:
     def __init__(self):
         self.key, self.zone, self.serp_zone = "good", "web_unlocker1", "serp_api1"
         self.serp_empty = False
+        self.serp_flaky = 0        # this many SERP answers come back empty first
+        self.serp_empty_from = 0   # result pages from this one on come back empty (0 = never)
         self.calls = []
         self.pages = {}       # url → (status, body)
         self.refuse = {}      # url → (status, error) from Bright Data itself
@@ -41,9 +43,12 @@ class FakeUnlocker:
         target = json["url"]
         if json["zone"] == self.serp_zone:
             q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
-            if json.get("data_format") != "parsed" or "brd_json" in q or self.serp_empty:   # the real zone: empty body
-                return answer(200, {"status_code": 200, "headers": {}, "body": ""})
             start = int(q.get("start", ["0"])[0])
+            flaky = self.serp_flaky > 0
+            self.serp_flaky -= 1 if flaky else 0
+            if json.get("data_format") != "parsed" or "brd_json" in q or self.serp_empty or flaky \
+                    or (self.serp_empty_from and start >= self.serp_empty_from * 10):   # the real zone: an empty body
+                return answer(200, {"status_code": 200, "headers": {}, "body": ""})
             found = [{"link": f"https://site{i + 1}.example/{q['q'][0].split()[0]}", "title": f"{q['q'][0]} #{i + 1}",
                       "description": f"about {q['q'][0]}", "rank": i + 1} for i in range(start, min(start + 10, 35))]
             if start == 0:   # Google's own redirect now and then
@@ -76,6 +81,7 @@ def env(tmp_path, monkeypatch):
     assert info.state == "loaded", info.error
     ctx = pm.ctx("brightdata")
     ctx.http = fake = FakeUnlocker()
+    __import__("sys").modules[pm.plugins["brightdata"].manifest.module_name + ".api"].RETRY_DELAY = 0
     ctx.settings.update({"api_key": "good", "zone": "web_unlocker1"})
     return store, pm, ctx, fake, tmp_path
 
@@ -237,7 +243,17 @@ def test_serp_template_exclude_and_errors(env):
     fake.serp_empty = True                                                     # a zone that answers with nothing
     inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="Pahlen", kind="search", routes=routes)
     assert any("didn't answer with parsed Google results" in e["text"] for e in inbox["x"])   # an error, not “nothing found”
+    assert sum(1 for c in fake.calls if "Pahlen" in c[2]["url"]) == 3          # asked three times first
     fake.serp_empty = False
+    fake.calls.clear()
+    fake.serp_flaky = 2                                                        # empty twice, then the page
+    inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="Pahlen", kind="search", routes=routes)
+    assert len(serp_urls(inbox["n"][0]["text"])) == 10 and len(fake.calls) == 3
+    fake.serp_empty_from = 1                                                   # page 2 empty: the 10 of page 1
+    inbox, _ = run_node(store, pm, tmp, {"query_mode": "input", "count": 25}, text="Pahlen", kind="search",
+                        routes=routes)
+    assert len(serp_urls(next(e["text"] for e in inbox["n"] if "URLS:" in e["text"]))) == 10
+    fake.serp_empty_from = 0
     ctx.settings.update({"serp_zone": ""})
     inbox, _ = run_node(store, pm, tmp, text="x", kind="search", routes=routes)
     assert "No SERP API zone" in inbox["x"][0]["text"]

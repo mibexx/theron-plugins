@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from . import browser
-from .api import COST, SERP_COST, Client, UnlockError
+from .api import COST, SERP_COST, Client, NotParsed, UnlockError
 from .browser import BrowserNode
 from .node import ScrapeNode
 from .search import SearchNode
@@ -43,7 +43,7 @@ def register(ctx):
             try:
                 hits = await Client(ctx.http, key, serp, timeout=60, what="SERP API zone").serp_page(
                     "theron", country=country, language=(values.get("language") or "").strip())
-            except UnlockError as exc:
+            except (UnlockError, NotParsed) as exc:
                 ok = False
                 lines.append(ctx.tr("✖ SERP API: {error}", error=exc))
             else:

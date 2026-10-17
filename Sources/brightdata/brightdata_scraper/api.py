@@ -9,6 +9,7 @@ Only successful requests are billed."""
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 from urllib.parse import urlencode, urlparse
 
@@ -16,6 +17,7 @@ ENDPOINT = "https://api.brightdata.com/request"
 COST = "≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan; 5,000 free per month"
 SERP_COST = "≈ $1.50 per 1,000 searches pay as you go, ≈ $1.30 on the Scale plan"
 PAGE = 10           # Google: 10 results per page – every page is one billed search
+RETRY_DELAY = 1.5   # seconds before asking again after an empty answer (times the attempt)
 MAX_RESULTS = 100
 
 
@@ -144,20 +146,24 @@ class Client:
         return {"url": url, "status": int(data.get("status_code") or 200), "body": page,
                 "headers": data.get("headers") if isinstance(data.get("headers"), dict) else {}}
 
-    async def serp_page(self, query: str, page: int = 0, *, country: str = "", language: str = "") -> list[dict]:
-        """One Google result page through the SERP zone (``page`` = 0, 1, …)."""
+    async def serp_page(self, query: str, page: int = 0, *, country: str = "", language: str = "",
+                        tries: int = 3) -> list[dict]:
+        """One Google result page through the SERP zone (``page`` = 0, 1, …). Now and then Bright Data answers with an
+        empty body – asked again (``tries`` in all) before it counts as an error."""
         body = {"url": google_url(query, page, country=country, language=language), "format": "json",
                 "data_format": "parsed"}
         if country:
             body["country"] = country.lower()
-        resp = await self._post(body)
-        try:
-            return organic(resp.json())
-        except NotParsed:
-            raise UnlockError("other", "The SERP zone didn't answer with parsed Google results – is it a SERP API "
-                                       "zone? (Its default response format doesn't matter.)") from None
-        except ValueError:
-            raise UnlockError("other", "The SERP zone didn't answer with JSON – is it a SERP API zone?") from None
+        for attempt in range(max(1, tries)):
+            resp = await self._post(body)
+            try:
+                return organic(resp.json())
+            except (NotParsed, ValueError):
+                if attempt + 1 < max(1, tries):
+                    await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+                    continue
+                raise NotParsed("no parsed Google page") from None
+        return []
 
     async def search(self, query: str, count: int, *, country: str = "", language: str = "",
                      exclude: list[str] | None = None) -> tuple[list[dict], int]:
@@ -165,7 +171,13 @@ class Client:
         count = max(1, min(int(count), MAX_RESULTS))
         out, seen, pages = [], set(), 0
         while len(out) < count and pages < MAX_RESULTS // PAGE + 2:
-            got = await self.serp_page(query, pages, country=country, language=language)
+            try:
+                got = await self.serp_page(query, pages, country=country, language=language)
+            except NotParsed:
+                if pages:   # a further page Google has nothing for: what we have is the result
+                    break
+                raise UnlockError("other", "The SERP zone didn't answer with parsed Google results (asked 3 times) – "
+                                           "is it a SERP API zone?") from None
             pages += 1
             fresh = 0
             for r in got:
