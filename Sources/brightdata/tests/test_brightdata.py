@@ -27,9 +27,20 @@ class FakeUnlocker:
         self.calls = []
         self.pages = {}       # url → (status, body)
         self.refuse = {}      # url → (status, error) from Bright Data itself
+        self.busy = {}        # url → how many times Bright Data answers 502 for it first (busy, under load)
+        self.at_once = self.most = 0   # requests in flight right now / at most
 
     async def request(self, method, url, *, json=None, headers=None, timeout=None, **kw):
         self.calls.append((method, url, dict(json or {}), dict(headers or {}), timeout))
+        self.at_once += 1
+        self.most = max(self.most, self.at_once)
+        try:
+            await asyncio.sleep(0.01)
+            return self._answer(url, json, headers)
+        finally:
+            self.at_once -= 1
+
+    def _answer(self, url, json, headers):
 
         def answer(status, body, head=None):
             raw = body.encode() if isinstance(body, str) else __import__("json").dumps(body).encode()
@@ -41,6 +52,9 @@ class FakeUnlocker:
         if json.get("zone") not in (self.zone, self.serp_zone):
             return answer(400, "", {"x-brd-error": f"zone '{json.get('zone')}' not found"})
         target = json["url"]
+        if self.busy.get(target, 0) > 0:   # Bright Data busy: the page comes back as a 502
+            self.busy[target] -= 1
+            return answer(200, {"status_code": 502, "headers": {}, "body": "Bad Gateway"})
         if json["zone"] == self.serp_zone:
             q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
             start = int(q.get("start", ["0"])[0])
@@ -152,11 +166,11 @@ def test_wrong_key_or_zone_stops_early(env):
     store, pm, ctx, fake, tmp = env
     ctx.settings.update({"api_key": "wrong", "parallel": 1})
     inbox, _ = run_node(store, pm, tmp)
-    assert "User authentication is required" in inbox["x"][0]["text"] and len(fake.calls) == 1
+    assert "User authentication is required" in inbox["x"][0]["text"] and len(fake.calls) == 2   # checked once more
     fake.calls.clear()
     ctx.settings.update({"api_key": "good", "zone": "falsch"})
     inbox, _ = run_node(store, pm, tmp)
-    assert "zone 'falsch' not found" in inbox["x"][0]["text"] and len(fake.calls) == 1
+    assert "zone 'falsch' not found" in inbox["x"][0]["text"] and len(fake.calls) == 2   # checked once more
     ctx.settings.update({"api_key": ""})
     inbox, _ = run_node(store, pm, tmp)
     assert "No Bright Data API key" in inbox["x"][0]["text"]
@@ -271,7 +285,7 @@ def test_serp_template_exclude_and_errors(env):
     fake.serp_empty = True                                                     # a zone that answers with nothing
     inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="Pahlen", kind="search", routes=routes)
     assert any("didn't answer with parsed Google results" in e["text"] for e in inbox["x"])   # an error, not “nothing found”
-    assert sum(1 for c in fake.calls if "Pahlen" in c[2]["url"]) == 3          # asked three times first
+    assert sum(1 for c in fake.calls if "Pahlen" in c[2]["url"]) == 5          # asked five times first
     fake.serp_empty = False
     fake.calls.clear()
     fake.serp_flaky = 2                                                        # empty twice, then the page
@@ -411,3 +425,31 @@ def test_the_test_button_checks_every_part(env, browser):
     assert "✔ Browser API · test page “Produkt example.com”" in text and "$8 per GB" in text
     ok, text = asyncio.run(button.run({"browser_user": browser.user, "browser_password": "x"}))
     assert not ok and "✖ Browser API: Auth failed" in text and "Web Unlocker" not in text
+
+
+def test_busy_pages_are_asked_again_and_nodes_share_the_limit(env):
+    """Several URLs at once: Bright Data answered 502 now and then – such a page is asked again, and the zone's limit
+    holds for all nodes together (parallel loop items), not per node."""
+    store, pm, ctx, fake, tmp = env
+    ctx.settings.update({"parallel": 2})
+    fake.busy = {"https://shop.example/a": 2, "https://shop.example/b": 1}
+    inbox, _ = run_node(store, pm, tmp)
+    assert inbox["n"][0]["text"].startswith("3 of 3 pages loaded")                  # none lost to a 502
+    assert sum(1 for c in fake.calls if c[2]["url"] == "https://shop.example/a") == 3
+    fake.calls.clear()
+    fake.most = 0
+    api = sys.modules[pm.plugins["brightdata"].manifest.module_name + ".api"]
+
+    async def three_nodes():
+        client = api.Client(fake, "good", "web_unlocker1", limit=2)
+        await asyncio.gather(*(client.unlock(f"https://shop.example/{i}") for i in range(9)))
+        other = api.Client(fake, "good", "web_unlocker1", limit=2)   # another node: the same zone, the same limit
+        await asyncio.gather(*(client.unlock(f"https://shop.example/x{i}") for i in range(3)),
+                             *(other.unlock(f"https://shop.example/y{i}") for i in range(3)))
+    asyncio.run(three_nodes())
+    assert len(fake.calls) == 15 and fake.most == 2
+    fake.busy = {"https://shop.example/z": 99}                                       # busy for good: an error in the end
+
+    async def hopeless():
+        return await api.Client(fake, "good", "web_unlocker1").unlock("https://shop.example/z")
+    assert asyncio.run(hopeless())["status"] == 502 and fake.busy["https://shop.example/z"] == 99 - api.TRIES

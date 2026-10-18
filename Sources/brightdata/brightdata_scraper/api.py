@@ -17,8 +17,31 @@ ENDPOINT = "https://api.brightdata.com/request"
 COST = "≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan; 5,000 free per month"
 SERP_COST = "≈ $1.50 per 1,000 searches pay as you go, ≈ $1.30 on the Scale plan"
 PAGE = 10           # Google: 10 results per page – every page is one billed search
-RETRY_DELAY = 1.5   # seconds before asking again after an empty answer (times the attempt)
+RETRY_DELAY = 2.0   # seconds before asking again (doubled each time, a little spread so parallel calls don't line up)
+TRIES = 4           # a page / a request that failed for a passing reason (502, 429, network, empty answer)
+SERP_TRIES = 5      # a Google page that came back unparsed
 MAX_RESULTS = 100
+PASSING = (408, 429, 500, 502, 503, 504)   # Bright Data busy or the target slow – worth another try
+_gates: "weakref.WeakKeyDictionary" = None   # event loop → {zone: semaphore}: all nodes share the zone's limit
+
+
+def gate(zone: str, limit: int) -> asyncio.Semaphore:
+    """One limit per zone for ALL nodes at once – five loop items in parallel no longer make five times the requests
+    (Bright Data answered with 502s and empty pages then). Per event loop: a semaphore belongs to one."""
+    global _gates
+    import weakref
+    if _gates is None:
+        _gates = weakref.WeakKeyDictionary()
+    zones = _gates.setdefault(asyncio.get_running_loop(), {})
+    if zone not in zones:
+        zones[zone] = asyncio.Semaphore(max(1, min(int(limit or 5), 20)))
+    return zones[zone]
+
+
+async def pause(attempt: int) -> None:
+    import random
+    if RETRY_DELAY:
+        await asyncio.sleep(RETRY_DELAY * (2 ** attempt) * random.uniform(0.75, 1.25))
 
 
 class UnlockError(RuntimeError):
@@ -44,13 +67,20 @@ def error_for(status: int, msg: str) -> UnlockError:
     low = msg.lower()
     if status == 402 or "balance" in low or "payment" in low or "quota" in low:
         return UnlockError("quota", msg or "Your Bright Data balance is used up.", status)
+    if status == 429 or "too many" in low or "rate limit" in low:   # before "zone": "… limit for zone x" is busy
+        return UnlockError("rate_limit", msg or "Too many Bright Data requests at once.", status)
+    if status >= 500:
+        return UnlockError("other", f"HTTP {status}: {msg}".strip(), status)
     if status in (401, 403) or "authentication" in low or "unauthorized" in low:
         return UnlockError("invalid_key", msg or "Bright Data refused the API key.", status)
     if "zone" in low:
         return UnlockError("no_zone", msg, status)
-    if status == 429:
-        return UnlockError("rate_limit", msg or "Too many Bright Data requests at once.", status)
     return UnlockError("other", f"HTTP {status}: {msg}".strip(), status)
+
+
+def passing(exc: UnlockError) -> bool:
+    """A failure worth another try: busy, overloaded, the network."""
+    return exc.kind in ("rate_limit", "network") or exc.status in PASSING
 
 
 def google_url(query: str, page: int = 0, *, country: str = "", language: str = "") -> str:
@@ -146,23 +176,44 @@ def organic(data) -> list[dict]:
 
 
 class Client:
-    def __init__(self, http, key: str, zone: str, *, timeout: float = 120, what: str = "Web Unlocker zone"):
+    def __init__(self, http, key: str, zone: str, *, timeout: float = 120, what: str = "Web Unlocker zone",
+                 limit: int = 5):
         if not (key or "").strip():
             raise UnlockError("no_key", "No Bright Data API key – add it in Settings → Plugins → Bright Data Scraper.")
         if not (zone or "").strip():
             raise UnlockError("no_zone", f"No {what} – add it in Settings → Plugins → Bright Data Scraper.")
-        self.http, self.key, self.zone, self.timeout = http, key.strip(), zone.strip(), timeout
+        self.http, self.key, self.zone, self.timeout, self.limit = http, key.strip(), zone.strip(), timeout, limit
 
-    async def _post(self, body: dict):
-        try:
-            resp = await self.http.request("POST", ENDPOINT, json={"zone": self.zone, **body}, timeout=self.timeout,
-                                           headers={"Authorization": f"Bearer {self.key}",
-                                                    "Content-Type": "application/json"})
-        except (OSError, TimeoutError) as exc:
-            raise UnlockError("network", f"Bright Data can't be reached: {exc or exc.__class__.__name__}") from exc
+    async def _send(self, body: dict):
+        async with gate(self.zone, self.limit):
+            try:
+                resp = await self.http.request("POST", ENDPOINT, json={"zone": self.zone, **body},
+                                               timeout=self.timeout,
+                                               headers={"Authorization": f"Bearer {self.key}",
+                                                        "Content-Type": "application/json"})
+            except (OSError, TimeoutError) as exc:
+                raise UnlockError("network", f"Bright Data can't be reached: {exc or exc.__class__.__name__}") from exc
         if not resp.ok:
             raise error_for(resp.status, _message(resp))
         return resp
+
+    async def _post(self, body: dict, tries: int = TRIES):
+        """One request – again after a passing failure (busy, 5xx, network), and a refused key or zone once more
+        before it counts: under load Bright Data answered like that now and then while the next call went through."""
+        checked = False
+        for attempt in range(max(1, tries)):
+            try:
+                return await self._send(body)
+            except UnlockError as exc:
+                last = attempt + 1 >= max(1, tries)
+                if passing(exc) and not last:
+                    await pause(attempt)
+                    continue
+                if exc.kind in ("invalid_key", "no_zone") and not checked and not last:
+                    checked = True
+                    await pause(attempt + 1)
+                    continue
+                raise
 
     async def unlock(self, url: str, *, markdown: bool = True, country: str = "", render: bool = False) -> dict:
         """{"url", "status" (the target's), "body", "headers"}; raises UnlockError when Bright Data itself refuses."""
@@ -173,21 +224,29 @@ class Client:
             body["country"] = country.lower()
         if render:
             body["render"] = "true"
-        resp = await self._post(body)
-        try:
-            data = resp.json()
-        except ValueError:
-            data = None
-        if not isinstance(data, dict) or "body" not in data:   # an answer as it is (format raw)
-            return {"url": url, "status": 200, "body": resp.text, "headers": {}}
-        page = data.get("body")
-        if not isinstance(page, str):
-            page = _json.dumps(page, ensure_ascii=False)
-        return {"url": url, "status": int(data.get("status_code") or 200), "body": page,
-                "headers": data.get("headers") if isinstance(data.get("headers"), dict) else {}}
+        result = {}
+        for attempt in range(TRIES):   # the target slow or Bright Data busy (502 …), or an empty page: once more
+            resp = await self._post(body)
+            try:
+                data = resp.json()
+            except ValueError:
+                data = None
+            if not isinstance(data, dict) or "body" not in data:   # an answer as it is (format raw)
+                result = {"url": url, "status": 200, "body": resp.text, "headers": {}}
+            else:
+                page = data.get("body")
+                if not isinstance(page, str):
+                    page = _json.dumps(page, ensure_ascii=False)
+                result = {"url": url, "status": int(data.get("status_code") or 200), "body": page,
+                          "headers": data.get("headers") if isinstance(data.get("headers"), dict) else {}}
+            if (result["status"] in PASSING or not result["body"].strip()) and attempt + 1 < TRIES:
+                await pause(attempt)
+                continue
+            return result
+        return result
 
     async def serp_page(self, query: str, page: int = 0, *, country: str = "", language: str = "",
-                        tries: int = 3) -> list[dict]:
+                        tries: int = SERP_TRIES) -> list[dict]:
         """One Google result page through the SERP zone (``page`` = 0, 1, …). Now and then Bright Data answers with an
         empty body – asked again (``tries`` in all) before it counts as an error."""
         body = {"url": google_url(query, page, country=country, language=language), "format": "json",
@@ -200,7 +259,7 @@ class Client:
                 return await resolve_redirects(organic(resp.json()))
             except (NotParsed, ValueError):
                 if attempt + 1 < max(1, tries):
-                    await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+                    await pause(attempt)
                     continue
                 raise NotParsed("no parsed Google page") from None
         return []
@@ -216,8 +275,8 @@ class Client:
             except NotParsed:
                 if pages:   # a further page Google has nothing for: what we have is the result
                     break
-                raise UnlockError("other", "The SERP zone didn't answer with parsed Google results (asked 3 times) – "
-                                           "is it a SERP API zone?") from None
+                raise UnlockError("other", f"The SERP zone didn't answer with parsed Google results (asked {SERP_TRIES} "
+                                           "times) – is it a SERP API zone?") from None
             pages += 1
             fresh = 0
             for r in got:

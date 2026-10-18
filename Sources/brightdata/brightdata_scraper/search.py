@@ -151,7 +151,8 @@ class SearchNode:
         s = self.ctx.settings
         try:
             client = Client(self.ctx.http, s.get("api_key") or "", s.get("serp_zone") or "",
-                            timeout=float(s.get("timeout") or 120), what="SERP API zone")
+                            timeout=float(s.get("timeout") or 120), what="SERP API zone",
+                            limit=int(s.get("parallel") or 5))
         except UnlockError as exc:
             return node.route("error", str(exc))
         node.progress(tr("writes the query …"))

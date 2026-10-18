@@ -28,7 +28,7 @@ Prices pay as you go, October 2026 – the Scale plan ($499/month) is cheaper pe
 | **Country** | two letters like `de` – searches and pages come from that country (prices, language). Empty: Bright Data decides |
 | **Search language** | the language of Google's results (default `de`) |
 | **Web Unlocker: run JavaScript** | Bright Data renders the page in a browser first – slower |
-| **Pages at once** | requests or browser sessions at the same time, 1–20 (default 5) |
+| **Pages at once** | requests or browser sessions at the same time, 1–20 (default 5) – for all nodes together: parallel loop items share it instead of multiplying it |
 | **Timeout per page** | default 120 s – hard pages take a while |
 
 Only fill in what you use. **Test** checks every part that is filled in – one billed request each – and shows the
@@ -51,6 +51,10 @@ results**, **Error**.
 | **Country** | overrides the setting for this node |
 | **Folder** | default `scraped/` in the project's workspace – one `.md` / `.html` per page; empty = no files |
 | **Hand on** | the **content** or **only titles and file paths**. Theron hands on about 12,000 characters per step in all: the file list comes first, then each page gets an equal share (or *Characters per page*) – the files always have everything, an agent behind the node can read them |
+
+Under load Bright Data answers now and then with a 502, 429, an empty page or an unparsed Google page – such a request is
+asked again (up to 4 times, a Google page up to 5, waiting 2, 4, 8 … seconds), and a refused key or zone is checked once
+more before the node stops. Only successful requests are billed.
 
 ## 🖥 Browser API (Bright Data)
 

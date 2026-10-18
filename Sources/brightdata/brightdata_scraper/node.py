@@ -112,7 +112,7 @@ class ScrapeNode:
                                           "in the node."))
         try:
             client = Client(self.ctx.http, s.get("api_key") or "", s.get("zone") or "",
-                            timeout=float(s.get("timeout") or 120))
+                            timeout=float(s.get("timeout") or 120), limit=int(s.get("parallel") or 5))
         except UnlockError as exc:
             return node.route("error", str(exc))
         markdown = (cfg.get("format") or "markdown") == "markdown"
