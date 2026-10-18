@@ -17,6 +17,7 @@ ENDPOINT = "https://api.brightdata.com/request"
 COST = "≈ $1.50 pay as you go, ≈ $1.30 on the Scale plan; 5,000 free per month"
 SERP_COST = "≈ $1.50 per 1,000 searches pay as you go, ≈ $1.30 on the Scale plan"
 PAGE = 10           # Google: 10 results per page – every page is one billed search
+RECENTLY_FAILED = 16.0   # seconds – “This query recently failed … try again after a minimum of 15 seconds”
 RETRY_DELAY = 2.0   # seconds before asking again (doubled each time, a little spread so parallel calls don't line up)
 TRIES = 4           # a page / a request that failed for a passing reason (502, 429, network, empty answer)
 SERP_TRIES = 5      # a Google page that came back unparsed
@@ -309,6 +310,106 @@ class Client:
                 break
         return out[:count], pages
 
+
+    async def parsed(self, url: str, *, country: str = "", tries: int = SERP_TRIES) -> dict:
+        """A Google page (any kind: Shopping results, a product's offers …) parsed by Bright Data – asked again when
+        the answer has no parsed page (an empty body now and then, Google's captcha, a timeout at Bright Data)."""
+        body = {"url": url, "format": "json", "data_format": "parsed"}
+        if country:
+            body["country"] = country.lower()
+        why = ""
+        for attempt in range(max(1, tries)):
+            resp = await self._post(body)
+            try:
+                return page_of(resp.json())
+            except (NotParsed, ValueError) as exc:
+                why = str(exc)
+                if attempt + 1 < max(1, tries):
+                    if "recently failed" in why.lower():   # Bright Data: not again before 15 seconds
+                        await asyncio.sleep(RECENTLY_FAILED)
+                    await pause(attempt)
+                    continue
+        raise NotParsed(f"no parsed Google page after {max(1, tries)} tries – {why}"[:300])
+
+    async def shopping(self, query: str, *, country: str = "", language: str = "") -> list[dict]:
+        """Google Shopping for ``query``: up to ~40 offers as Google shows them (one billed search)."""
+        page = await self.parsed(shopping_url(query, country=country, language=language), country=country)
+        return [offer_of(i) for i in page.get("shopping") or [] if isinstance(i, dict) and i.get("title")]
+
+    async def product_offers(self, link: str, *, country: str = "") -> list[dict]:
+        """Every shop's offer on a Google Shopping product page (one billed search)."""
+        page = await self.parsed(link, country=country)
+        title = str((page.get("product") or {}).get("title") or "")
+        return [shop_offer_of(o, title) for o in page.get("product_offers") or [] if isinstance(o, dict)]
+
+
+def page_of(data) -> dict:
+    """The parsed Google page of an answer (also when it comes wrapped as {"status_code", "body": "<json>"})."""
+    why = ""
+    if isinstance(data, dict) and "body" in data and "general" not in data:
+        why = refusal(data.get("headers") if isinstance(data.get("headers"), dict) else {})[0]
+        body = data.get("body")
+        if isinstance(body, str):
+            try:
+                body = _json.loads(body) if body.strip() else None
+            except ValueError:
+                raise NotParsed(why or body.strip()[:80]) from None
+        data = body
+    if not isinstance(data, dict) or "general" not in data:
+        raise NotParsed(why or (str(data)[:80] if data else "empty"))
+    return data
+
+
+def shopping_url(query: str, *, country: str = "", language: str = "") -> str:
+    params = {"q": query, "tbm": "shop"}
+    if country:
+        params["gl"] = country.lower()
+    if language:
+        params["hl"] = language.lower()
+    return "https://www.google.com/search?" + urlencode(params)
+
+
+def price_of(text) -> float | None:
+    """“1.062,00 €”, “€1,062.00”, “49,90 €” → 1062.0 / 49.9 – None without a number."""
+    import re
+    m = re.search(r"\d[\d.,\s]*", str(text or ""))
+    if not m:
+        return None
+    num = re.sub(r"\s", "", m.group(0)).rstrip(".,")
+    if "," in num and "." in num:
+        num = num.replace(".", "").replace(",", ".") if num.rfind(",") > num.rfind(".") else num.replace(",", "")
+    elif "," in num:
+        head, _, tail = num.rpartition(",")
+        num = (head.replace(",", "") + "." + tail) if len(tail) != 3 else num.replace(",", "")
+    elif num.count(".") == 1 and len(num.rpartition(".")[2]) == 3:
+        num = num.replace(".", "")   # 1.062 = thousands
+    try:
+        return float(num.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _first(value) -> str:
+    return str(value[0] if isinstance(value, list) and value else value or "").strip()
+
+
+def offer_of(item: dict) -> dict:
+    """One offer of the Shopping result list – the price as Google shows it, the shop, the link to the product page."""
+    return {"title": str(item.get("title") or "").strip(), "price": _first(item.get("price")),
+            "value": price_of(_first(item.get("price"))), "old_price": str(item.get("old_price") or "").strip(),
+            "shop": str(item.get("shop") or "").strip(), "more": bool(item.get("tag")),
+            "rating": item.get("rating"), "reviews": item.get("reviews_cnt"), "product": str(item.get("cid") or ""),
+            "link": str(item.get("link") or ""), "shipping": "", "total": "", "shop_link": ""}
+
+
+def shop_offer_of(item: dict, title: str = "") -> dict:
+    """One shop's offer on a product page: item price, shipping, total and the link into the shop."""
+    price = _first(item.get("item_price")) or _first(item.get("total_price"))
+    return {"title": (_first(item.get("details")) or title).strip(), "price": price, "value": price_of(price),
+            "old_price": "", "shop": str(item.get("seller") or "").strip(), "more": False,
+            "rating": item.get("rating"), "reviews": item.get("reviews_cnt"), "product": "",
+            "link": str(item.get("link") or ""), "shipping": str(item.get("shipping") or "").strip(),
+            "total": _first(item.get("total_price")), "shop_link": str(item.get("link") or "")}
 
 def excluded(url: str, sites: list[str]) -> bool:
     host = urlparse(url).netloc.lower().removeprefix("www.")

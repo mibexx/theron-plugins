@@ -56,6 +56,8 @@ class FakeUnlocker:
         if self.busy.get(target, 0) > 0:   # Bright Data busy: the page comes back as a 502
             self.busy[target] -= 1
             return answer(200, {"status_code": 502, "headers": {}, "body": "Bad Gateway"})
+        if json["zone"] == self.serp_zone and ("tbm=shop" in target or "ibp=oshop" in target):
+            return answer(200, {"status_code": 200, "headers": {}, "body": __import__("json").dumps(self.shop(target))})
         if json["zone"] == self.serp_zone:
             q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
             start = int(q.get("start", ["0"])[0])
@@ -85,6 +87,25 @@ class FakeUnlocker:
             page = (f"# Produkt {name}\n\nPreis: 19,99 €\n\n" + "Text " * 50) if json.get("data_format") == "markdown" \
                 else f"<html><head><title>Produkt {name}</title></head><body><p>Preis: 19,99 €</p></body></html>"
         return answer(200, {"status_code": status, "headers": {"content-type": "text/html"}, "body": page})
+
+
+    def shop(self, target):
+        """Google Shopping: a result list per query (tbm=shop) or a product's page with every shop's offer."""
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)["q"][0]
+        if "ibp=oshop" in target:
+            return {"general": {}, "product": {"title": f"{q} (Produkt)"}, "product_offers": [
+                {"seller": "Pool & Mehr", "details": [f"{q} 3 kW"], "item_price": ["609,00 €"],
+                 "shipping": "Kostenlose Lieferung", "total_price": ["609,00 €"], "link": "https://poolundmehr.example/p"},
+                {"seller": "Poolspecial", "details": [f"{q} 3 kW Incoloy"], "item_price": ["679,95 €"],
+                 "shipping": "4,90 €", "total_price": ["684,85 €"], "link": "https://poolspecial.example/p"}]}
+        if q == "nichts":
+            return {"general": {}, "shopping": []}
+        link = "https://www.google.com/search?ibp=oshop&q=" + urllib.parse.quote(q)
+        return {"general": {}, "shopping": [
+            {"title": f"{q} Titan", "price": "1.062,00 €", "shop": "Teuer-Shop", "link": link + "&x=1", "cid": "1"},
+            {"title": f"{q}", "price": "515,00 €", "old_price": "In der Regel 575 €", "shop": "Pool-Shop",
+             "tag": "& weitere Preise", "link": link, "cid": "2", "rating": 4.5},
+            {"title": "Pahlen Elektroheizer", "price": "49,90 €", "shop": "Baumarkt", "link": link + "&x=3", "cid": "3"}]}
 
 
 @pytest.fixture
@@ -471,3 +492,69 @@ def test_busy_pages_are_asked_again_and_nodes_share_the_limit(env):
     async def hopeless():
         return await api.Client(fake, "good", "web_unlocker1").unlock("https://shop.example/z")
     assert asyncio.run(hopeless())["status"] == 502 and fake.busy["https://shop.example/z"] == 99 - api.TRIES
+
+
+# ------------------------------------------------------------------ Google Shopping
+class ShoppingAi:
+    def __init__(self):
+        self.prompts = []
+
+    async def ask(self, prompt, system="", model="haiku"):
+        self.prompts.append(prompt)
+        if "OFFERS:" in prompt:   # the check: keep the offers named like the product
+            lines = prompt.split("OFFERS:\n")[1].split("\n\nAnswer")[0].splitlines()
+            return json.dumps({"keep": [int(ln.split(".")[0]) for ln in lines if "3 kW" in ln and "Titan" not in ln]})
+        return json.dumps({"products": [{"name": "Pahlen Elektroheizer 3 kW",
+                                         "queries": ["Pahlen Elektroheizer 3 kW 400V", "7332703000630", "x", "y"]}]})
+
+
+def test_google_shopping_offers_per_product(env):
+    store, pm, ctx, fake, tmp = env
+    ctx.settings.update({"serp_zone": "serp_api1"})
+    routes = {"offers": "n", "empty": "e", "error": "x"}
+    text = "Pahlen Elektroheizer 3 kW | 7332703000630\nnichts\n"
+    inbox, ctrl = run_node(store, pm, tmp, {"query_mode": "input", "open": 1, "check": False}, text=text, kind="shopping",
+                           routes=routes)
+    out = inbox["n"][0]["text"]
+    sent = [c[2] for c in fake.calls]
+    assert len(sent) == 4                                      # 3 queries + 1 product page
+    assert all(b["zone"] == "serp_api1" and b["data_format"] == "parsed" for b in sent)
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(sent[0]["url"]).query)
+    assert q["tbm"] == ["shop"] and q["gl"] == ["de"]
+    block = out.split("## Pahlen Elektroheizer 3 kW")[1].split("## nichts")[0]
+    prices = [ln.split(" · ")[0][2:] for ln in block.splitlines() if ln.startswith("- ")]
+    assert prices[0] == "49,90 €" and prices[-1] == "1.062,00 €"            # the cheapest first
+    assert prices.count("515,00 €") == 1                                      # one shop, one price: one offer
+    assert "609,00 € · Pool & Mehr" in block and "4,90 € → 684,85 € · https://poolspecial.example/p" in block
+    assert "In der Regel 575 €" in block
+    assert "## nichts" in out and "No offers." in out.split("## nichts")[1]
+    files = out.split("FILES:\n")[1].split("\n\n")[0].splitlines()
+    data = json.loads(Path(files[0]).read_text())
+    assert [r["name"] for r in data] == ["Pahlen Elektroheizer 3 kW", "nichts"] and len(data[0]["shops"]) == 2
+    said = [e for e in store.events(ctrl.run_id) if e["type"] == "plugin_message"][0]["text"]
+    assert "1 of 2 products with offers (4 searches through Bright Data)" in said
+
+
+def test_google_shopping_queries_by_ai_and_nothing_found(env):
+    store, pm, ctx, fake, tmp = env
+    ctx.settings.update({"serp_zone": "serp_api1"})
+    ctx.ai = ai = ShoppingAi()
+    routes = {"offers": "n", "empty": "e", "error": "x"}
+    inbox, _ = run_node(store, pm, tmp, {"queries": 2}, text="Artikel 910, EAN 7332703000630", kind="shopping",
+                        routes=routes)
+    assert ai.prompts and "never invent" in ai.prompts[0]
+    sent = [urllib.parse.parse_qs(urllib.parse.urlparse(c[2]["url"]).query)["q"][0] for c in fake.calls]
+    assert sent == ["Pahlen Elektroheizer 3 kW 400V", "7332703000630"] or \
+        sorted(sent) == sorted(["Pahlen Elektroheizer 3 kW 400V", "7332703000630"])   # at most 2 queries
+    out = inbox["n"][0]["text"]
+    assert "Queries: Pahlen Elektroheizer 3 kW 400V · 7332703000630" in out
+    prices = [ln.split(" · ")[0][2:] for ln in out.splitlines() if ln.startswith("- ")]
+    assert prices == ["515,00 €"] and "offers of other products left out" in out   # the AI's check: Titan, Baumarkt …
+    check = next(pr for pr in ai.prompts if "OFFERS:" in pr)
+    assert "PRODUCT: Pahlen Elektroheizer 3 kW" in check and "Teuer-Shop" in check
+    fake.calls.clear()
+    inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="nichts", kind="shopping", routes=routes)
+    assert "Google Shopping found no offers." in inbox["e"][0]["text"]
+    ctx.settings.update({"serp_zone": ""})
+    inbox, _ = run_node(store, pm, tmp, {"query_mode": "input"}, text="nichts", kind="shopping", routes=routes)
+    assert "SERP API zone" in inbox["x"][0]["text"]

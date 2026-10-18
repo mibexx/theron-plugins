@@ -1,6 +1,7 @@
-"""Bright Data for Theron – three process nodes and a "Test" button (theron_api 1, Theron ≥ 0.20):
+"""Bright Data for Theron – four process nodes and a "Test" button (theron_api 1, Theron ≥ 0.20):
 
 - 🔍 Google search (Bright Data) – SERP API: a query from the input, the URLs of the hits on
+- 🛒 Google Shopping (Bright Data) – SERP API: the offers Google Shopping shows for the products in the input
 - 🛰 Web Unlocker (Bright Data) – web pages past bot protection, as Markdown or raw HTML
 - 🖥 Browser API (Bright Data) – web pages in a real Chrome at Bright Data (JavaScript, CAPTCHAs)"""
 
@@ -11,10 +12,12 @@ from .api import COST, SERP_COST, Client, NotParsed, UnlockError
 from .browser import BrowserNode
 from .node import ScrapeNode
 from .search import SearchNode
+from .shopping import ShoppingNode
 
 
 def register(ctx):
     SearchNode(ctx).register()
+    ShoppingNode(ctx).register()
     ScrapeNode(ctx).register()
     BrowserNode(ctx).register()
 

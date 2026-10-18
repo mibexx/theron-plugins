@@ -1,6 +1,6 @@
 # Bright Data Scraper
 
-Three process nodes for **Bright Data**: search Google, load pages past bot protection, open pages in a real browser.
+Four process nodes for **Bright Data**: search Google, find the offers Google Shopping shows, load pages past bot protection, open pages in a real browser.
 Bright Data's proxy network gets past bot protection, CAPTCHAs and geo blocks, so the nodes reach shops and price
 comparison sites that block a normal script or even your own browser. Nothing runs on your machine – it works the same
 on a server.
@@ -11,6 +11,7 @@ the pages.
 | Node | Bright Data product | Billed | Good for |
 |---|---|---|---|
 | 🔍 **Google search (Bright Data)** | SERP API | per search (10 results): ≈ $1.50 / 1,000 | the URLs of the hits for a query |
+| 🛒 **Google Shopping (Bright Data)** | SERP API | per search (≈ 40 offers) and per opened product page: ≈ $1.50 / 1,000 | the prices Google shows for your products, per shop |
 | 🛰 **Web Unlocker (Bright Data)** | Web Unlocker API | per page: ≈ $1.50 / 1,000 | most pages, also with bot protection – fast, as Markdown |
 | 🖥 **Browser API (Bright Data)** | Browser API | by traffic: ≈ $8 / GB | pages that need JavaScript, clicks or that block even the Web Unlocker |
 
@@ -40,6 +41,35 @@ Same node as in the **Google SERP** plugin, through Bright Data: the query is wr
 as it is, or built from a template (`{input} site:geizhals.de`); the number of results is fixed or read from the input
 (“top 20”); results can leave out sites. Hands on a `URLS:` block that the scrape nodes read. Outputs: **URLs**, **No
 results**, **Error**.
+
+## 🛒 Google Shopping (Bright Data)
+
+For price monitoring: for every product in the input it asks **Google Shopping** and hands on the offers – the **price
+as Google shows it** (gross, what customers see first), the shop, an old price (“usually 575 €”), rating. Products and
+queries:
+
+- **AI finds the products and writes the queries** – up to *Queries per product* (default 3): the full name, a
+  distinctive part of it (brand + model + the values that tell variants apart), the EAN, the article number. Only
+  what the input gives, never invented.
+- **One product per line** – queries of one product apart by ` | ` (`Pahlen Elektroheizer 3 kW 400V | 7332703000630`),
+  or through a **template** (`{input} kaufen`).
+
+The offers of all queries of a product are put together without doubles, the cheapest first. Google's list shows ONE
+shop for a product several shops sell (“& more prices”): **Every shop's offer: product pages per product** (default 0)
+opens that many of them and adds every shop's offer with item price, shipping, total and the link into the shop.
+
+Google Shopping also shows similar products – and for an EAN Google doesn't know, anything at all. **AI keeps only
+offers of the product** (on by default) compares every title with the product (brand, model, variant such as 3 kW /
+400 V) and leaves the others out (they stay in the files); only the product's own pages are opened. A product page
+answers less reliably than the list – Bright Data asks again (after 15 seconds when it says the query “recently
+failed”), and if it still fails the offers of the list remain.
+
+The hand-over lists the offers per product (*Offers per product*, default 20); the folder (default `shopping/` in the
+project's working folder) gets a JSON and a Markdown file with all of them. The check only sees the titles –
+put an agent after the node if the EAN must match. Outputs: **Offers**, **No offers**,
+**Error**.
+
+Cost: one search per query and per opened product page – 20 products × 3 queries = 60 searches ≈ $0.09.
 
 ## 🛰 Web Unlocker (Bright Data)
 
