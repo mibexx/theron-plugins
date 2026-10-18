@@ -56,6 +56,10 @@ Under load Bright Data answers now and then with a 502, 429, an empty page or an
 asked again (up to 4 times, a Google page up to 5, waiting 2, 4, 8 … seconds), and a refused key or zone is checked once
 more before the node stops. Only successful requests are billed.
 
+Some sites (e.g. kaufland.de) Bright Data loads only for **verified accounts** – their robots.txt closes them to
+accounts without KYC. The page then fails with Bright Data's reason and the hint to verify the account
+(brightdata.com/cp/kyc); it isn't asked again, and the Browser API is closed the same way until then.
+
 ## 🖥 Browser API (Bright Data)
 
 Every URL in its own Chrome session at Bright Data: the page loads, JavaScript runs, Bright Data solves CAPTCHAs, then

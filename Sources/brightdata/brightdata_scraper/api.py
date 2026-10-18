@@ -78,6 +78,22 @@ def error_for(status: int, msg: str) -> UnlockError:
     return UnlockError("other", f"HTTP {status}: {msg}".strip(), status)
 
 
+
+def refusal(headers: dict) -> tuple[str, str]:
+    """Why Bright Data didn't deliver the page (x-brd-error) and its code (x-brd-error-code, e.g. ``policy_20140``: the
+    site is closed to accounts without KYC verification under its robots.txt) – from the wrapped answer's headers."""
+    low = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
+    return low.get("x-brd-error", "").strip()[:400], low.get("x-brd-error-code", "").strip()
+
+
+def explain(status: int, why: str, code: str) -> str:
+    """The error for one page: the status, Bright Data's reason – and what to do when the account may not load the site."""
+    text = f"HTTP {status}" + (f" – {why}" if why else "")
+    if code.startswith("policy") and ("kyc" in why.lower() or "robots" in why.lower()):
+        text += (" → Bright Data loads this site only for verified accounts (KYC, brightdata.com/cp/kyc) – "
+                 "the Browser API is blocked the same way until then")
+    return text
+
 def passing(exc: UnlockError) -> bool:
     """A failure worth another try: busy, overloaded, the network."""
     return exc.kind in ("rate_limit", "network") or exc.status in PASSING
@@ -232,13 +248,16 @@ class Client:
             except ValueError:
                 data = None
             if not isinstance(data, dict) or "body" not in data:   # an answer as it is (format raw)
-                result = {"url": url, "status": 200, "body": resp.text, "headers": {}}
+                result = {"url": url, "status": 200, "body": resp.text, "headers": {}, "why": "", "code": ""}
             else:
                 page = data.get("body")
                 if not isinstance(page, str):
                     page = _json.dumps(page, ensure_ascii=False)
                 result = {"url": url, "status": int(data.get("status_code") or 200), "body": page,
                           "headers": data.get("headers") if isinstance(data.get("headers"), dict) else {}}
+            result["why"], result["code"] = refusal(result["headers"])
+            if result["code"].startswith("policy"):   # Bright Data won't load this site for the account – asking again won't change that
+                return result
             if (result["status"] in PASSING or not result["body"].strip()) and attempt + 1 < TRIES:
                 await pause(attempt)
                 continue

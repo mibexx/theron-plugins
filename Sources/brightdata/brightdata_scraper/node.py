@@ -8,7 +8,7 @@ import html as _html
 import re
 from pathlib import Path
 
-from .api import Client, UnlockError, redirect_target
+from .api import Client, UnlockError, explain, redirect_target
 
 HANDOVER = 11_800   # Theron passes a plugin's hand-over on with at most 12,000 characters
 URL = re.compile(r"https?://[^\s<>\"'`)\]]+", re.I)
@@ -138,8 +138,8 @@ class ScrapeNode:
                     body = page["body"]
                     r = {"url": url, "title": title_of(body, markdown), "text": text_of(body, markdown),
                          "markdown": body if markdown else "", "raw": "" if markdown else body}
-                    if page["status"] >= 400 and len(r["text"]) < 500:
-                        r["error"] = f"HTTP {page['status']}"
+                    if page.get("code", "").startswith("policy") or (page["status"] >= 400 and len(r["text"]) < 500):
+                        r["error"] = explain(page["status"], page.get("why", ""), page.get("code", ""))
                     elif not body.strip():
                         r["error"] = tr("empty page")
                     results[url] = r

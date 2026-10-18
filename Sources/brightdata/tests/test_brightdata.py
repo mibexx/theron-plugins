@@ -27,6 +27,7 @@ class FakeUnlocker:
         self.calls = []
         self.pages = {}       # url → (status, body)
         self.refuse = {}      # url → (status, error) from Bright Data itself
+        self.blocked = {}     # url → (status, x-brd-error-code, x-brd-error) in the wrapped answer (e.g. no KYC)
         self.busy = {}        # url → how many times Bright Data answers 502 for it first (busy, under load)
         self.at_once = self.most = 0   # requests in flight right now / at most
 
@@ -71,6 +72,10 @@ class FakeUnlocker:
             if q["q"][0] == "leer":
                 page = {"general": {"search_engine": "google", "query": "leer"}}   # a page without hits
             return answer(200, {"status_code": 200, "headers": {}, "body": __import__("json").dumps(page)})
+        if target in self.blocked:
+            status, code, why = self.blocked[target]
+            return answer(200, {"status_code": status, "headers": {"x-brd-error-code": code, "x-brd-error": why},
+                                "body": why})
         if target in self.refuse:
             status, why = self.refuse[target]
             return answer(status, "", {"x-brd-error": why})
@@ -160,6 +165,19 @@ def test_single_failures_are_listed_all_failing_goes_to_error(env):
     fake.pages["https://shop.example/a"] = (200, "   ")
     inbox, _ = run_node(store, pm, tmp)
     assert "No page could be loaded" in inbox["x"][0]["text"] and "empty page" in inbox["x"][0]["text"]
+
+
+def test_a_site_closed_without_kyc_says_why_and_is_not_asked_again(env):
+    """Kaufland & co.: without KYC verification Bright Data won't load the site (robots.txt) – the reason comes in the
+    wrapped answer's headers; it was shown as a bare “HTTP 502” and asked four times."""
+    store, pm, ctx, fake, tmp = env
+    url = "https://other.example/c"
+    fake.blocked[url] = (402, "policy_20140", "Residential Failed (bad_endpoint): Requested site is not available for "
+                                              "immediate residential (no KYC) access mode in accordance with robots.txt.")
+    inbox, _ = run_node(store, pm, tmp)
+    text = inbox["n"][0]["text"]
+    assert "HTTP 402 – Residential Failed" in text and "KYC" in text and "brightdata.com/cp/kyc" in text
+    assert sum(1 for c in fake.calls if c[2].get("url") == url) == 1
 
 
 def test_wrong_key_or_zone_stops_early(env):
